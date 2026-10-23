@@ -1,9 +1,9 @@
 /* Ballistic Visualizer service worker: the app works offline after the first visit. */
-const VERSION = 'bv-2026-10-22-1';
+const VERSION = 'bv-2026-10-23-1';
 const SHELL = [
   './', './index.html', './manifest.webmanifest',
-  './icons/icon-192.png', './icons/icon-512.png', './icons/maskable-192.png', './icons/maskable-512.png',
-  './icons/apple-touch-icon.png', './icons/favicon-32.png'
+  './icon-192.png', './icon-512.png', './maskable-192.png', './maskable-512.png',
+  './apple-touch-icon.png', './favicon-32.png'
 ];
 const FONT_CACHE = 'bv-fonts';
 
