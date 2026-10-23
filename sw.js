@@ -1,5 +1,5 @@
 /* Ballistic Visualizer service worker: the app works offline after the first visit. */
-const VERSION = 'bv-2026-10-23-2';
+const VERSION = 'bv-2026-10-23-3';
 const SHELL = [
   './', './index.html', './manifest.webmanifest',
   './icon-192.png', './icon-512.png', './maskable-192.png', './maskable-512.png',

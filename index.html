@@ -327,6 +327,20 @@ dialog.modal:not([open]){opacity:0;transform:translateY(8px) scale(.98)}
   transition:opacity .2s,transform .25s var(--ease)}
 .toast.show{opacity:1;transform:translate(-50%,0)}
 
+/* Drive sync button */
+.btn.sync{position:relative;padding:0 11px}
+.btn.sync .s-off{display:none}
+.btn.sync[data-s="pending"] .s-ok,.btn.sync[data-s="expired"] .s-ok,.btn.sync[data-s="busy"] .s-ok,.btn.sync[data-s="off"] .s-ok{display:none}
+.btn.sync[data-s="off"] .s-off{display:inline}
+.btn.sync[data-s="off"]{color:var(--dust)}
+.btn.sync[data-s="pending"]::after,.btn.sync[data-s="expired"]::after{content:"";position:absolute;top:6px;left:24px;width:8px;height:8px;border-radius:50%;background:var(--fde);box-shadow:0 0 0 2px var(--plate)}
+.btn.sync[data-s="busy"] svg{animation:syncp 1s ease-in-out infinite alternate}
+@keyframes syncp{from{opacity:1}to{opacity:.35}}
+@media (max-width:900px){ .btn.sync .lbl{display:none} }
+.setup{overflow:hidden;flex:0 1 auto} .setup span{overflow:hidden;text-overflow:ellipsis;min-width:0}
+@media (max-width:520px){ .bar-actions .btn{padding:0 9px} .bar-actions{flex:none} .setup{margin-left:0} .setup span{padding:7px 8px} }
+@media (max-width:380px){ .brand{display:none} .bar{gap:8px} }
+
 /* Setups */
 .su-list{list-style:none;margin:12px 0 0;padding:0;display:grid;gap:8px}
 .su-item{display:flex;align-items:stretch;border:1px solid var(--line);border-radius:12px;background:var(--ground);overflow:hidden}
@@ -358,6 +372,7 @@ dialog.modal:not([open]){opacity:0;transform:translateY(8px) scale(.98)}
 .updbar{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:110;display:flex;align-items:center;gap:10px;
   padding:8px 8px 8px 16px;border-radius:14px;background:var(--plate-3);border:1px solid var(--line-2);box-shadow:0 12px 30px rgba(0,0,0,.5);font-size:14px;white-space:nowrap}
 .updbar[hidden]{display:none}
+[hidden]{display:none!important}
 .updbar .btn{height:34px}
 /* Installed app: keep the bar clear of the status bar / notch */
 @media (display-mode: standalone){ .bar{padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env(safe-area-inset-right))} }
@@ -428,6 +443,7 @@ dialog.modal:not([open]){opacity:0;transform:translateY(8px) scale(.98)}
     <label class="switch" id="calibWrap" title="Aim with the drop corrected by your logged hits (C)"><input type="checkbox" id="vCorr" aria-label="Calibrated"><span class="lbl">Calibrated</span></label>
     <button class="btn" id="btnCal" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg><span class="lbl">Calibration</span><span class="count" id="shotCount"></span></button>
     <button class="btn primary" id="btnInstall" type="button" hidden title="Install as an app"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg><span class="lbl">Install</span></button>
+    <button class="btn sync" id="btnSync" type="button" hidden aria-label="Google Drive sync" data-s="ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M7 19h10.5a4.5 4.5 0 0 0 .6-8.96A6.5 6.5 0 0 0 5.6 9.3 4.9 4.9 0 0 0 7 19z"/><path class="s-ok" d="M9.5 14l2 2 3.5-4"/><path class="s-off" d="M4 4l16 16"/></svg><span class="lbl" id="syncLbl">Synced</span></button>
     <button class="btn" id="btnSet" type="button" aria-label="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg><span class="lbl">Settings</span></button>
   </div>
 </header>
@@ -672,6 +688,16 @@ dialog.modal:not([open]){opacity:0;transform:translateY(8px) scale(.98)}
         <button class="btn primary" id="btnOpenSetups" type="button">Manage setups</button>
       </div>
     </div>
+    <div class="sec" id="syncSec">
+      <h3>Sync with Google Drive</h3>
+      <p id="syncState">Not connected.</p>
+      <div class="row">
+        <button class="btn primary" id="syncConnect" type="button">Connect Google Drive</button>
+        <button class="btn" id="syncNowBtn" type="button" hidden>Sync now</button>
+        <button class="btn quiet" id="syncOff" type="button" hidden>Disconnect</button>
+      </div>
+      <p class="hint" style="margin-top:8px">Your hits, calibration and setups are kept in one file, ballistic-visualizer.json, in your Google Drive, so the PC and the phone share them. The app only sees the files it created. Zoom, steps and ranges stay per device.</p>
+    </div>
     <div class="sec" id="appSec">
       <h3>App</h3>
       <p id="appState">Checking…</p>
@@ -868,7 +894,7 @@ function loadSetups(){
 let SETUPS = loadSetups();
 const allSetups = () => [BUILTIN, ...SETUPS.list];
 const activeSetup = () => allSetups().find(x=>x.id===SETUPS.active) || BUILTIN;
-function saveSetups(){ try{ localStorage.setItem('bv_setups', JSON.stringify(SETUPS)); }catch(e){ toast('Could not save: storage is full'); } }
+function saveSetups(){ try{ trackSetups(localStorage.getItem('bv_setups'), SETUPS); localStorage.setItem('bv_setups', JSON.stringify(SETUPS)); }catch(e){ toast('Could not save: storage is full'); } }
 let DS = activeSetup();
 state.cal = DS.baseCal;
 const maxDist = () => DS.rows[DS.rows.length-1][0];
@@ -935,7 +961,7 @@ function loadEng(){
 }
 let ENG = loadEng();
 let fitCache=null;
-function saveEng(){ try{ localStorage.setItem(engKey(), JSON.stringify(ENG)); }catch(e){} }
+function saveEng(){ try{ const k=engKey(); trackEng(k, localStorage.getItem(k), ENG); localStorage.setItem(k, JSON.stringify(ENG)); }catch(e){} }
 function currentFit(){ if(!fitCache) fitCache=computeFit(); return fitCache; }
 
 function unitCm(unit, dist, factor){        // cm per 1 unit of reading at this distance
@@ -2025,6 +2051,216 @@ $('#bSave').onclick=()=>{
   saveSetups(); $('#dlgBuild').close(); useSetup(id);
   toast(i>=0 ? 'Setup updated' : `Using ${name}`);
 };
+
+
+/* ---------- Google Drive sync: hits, calibration and setups in one JSON file ---------- */
+var GOOGLE_CLIENT_ID = '477431814443-0qf9ei7g27nps2fkivmumim9eagscjsa.apps.googleusercontent.com';   // OAuth client ID (Web application) from Google Cloud. Public by design: it only works from the authorized origin.
+var SYNC_FILE = 'ballistic-visualizer.json', DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+var syncMeta = null, syncSeq = 0, syncT = 0, syncRun = null, syncAgain = false, syncUi = 'off', gisLoad = null;
+function sm(){ if(!syncMeta){ let o=null; try{ o=JSON.parse(localStorage.getItem('bv_sync')||'null'); }catch(e){}
+  syncMeta=Object.assign({ hitDel:{}, cfgU:{}, setupDel:{}, fileId:null, email:null, name:null, last:0, dirty:false }, o||{}); } return syncMeta; }
+function smSave(){ try{ localStorage.setItem('bv_sync', JSON.stringify(sm())); }catch(e){} }
+function noU(o){ return JSON.stringify({...o, u:undefined}); }
+function syncOn(){ return !!(GOOGLE_CLIENT_ID && sm().email); }
+function trackDirty(){ const m=sm(); m.dirty=true; syncSeq++; smSave(); if(typeof syncSoon==='function') syncSoon(); }
+/* Every hit and setup carries the time it last changed (u); deletions leave a dated mark, so two devices can be merged item by item. */
+function trackEng(key, prevText, cur){
+  let prev=null; try{ prev=JSON.parse(prevText||'null'); }catch(e){}
+  const m=sm(), now=Date.now(); let dirty=false;
+  const pm=new Map(((prev&&prev.list)||[]).map(h=>[h.id,h]));
+  for(const h of cur.list){ const p=pm.get(h.id);
+    if(!p){ if(!h.u) h.u=now; dirty=true; }
+    else { if(noU(p)!==noU(h)){ h.u=now; dirty=true; } else if(p.u && !h.u) h.u=p.u; pm.delete(h.id); } }
+  if(pm.size){ const d=m.hitDel[key]||(m.hitDel[key]={}); for(const id of pm.keys()) d[id]=now; dirty=true; }
+  const cfg=o=>JSON.stringify({...o, list:undefined});
+  if(prev && cfg(prev)!==cfg(cur)){ m.cfgU[key]=now; dirty=true; }
+  if(dirty) trackDirty();
+}
+function trackSetups(prevText, cur){
+  let prev=null; try{ prev=JSON.parse(prevText||'null'); }catch(e){}
+  const m=sm(), now=Date.now(); let dirty=false;
+  const pm=new Map(((prev&&prev.list)||[]).map(x=>[x.id,x]));
+  for(const x of cur.list){ const p=pm.get(x.id);
+    if(!p){ if(!x.u) x.u=now; dirty=true; }
+    else { if(noU(p)!==noU(x)){ x.u=now; dirty=true; } else if(p.u && !x.u) x.u=p.u; pm.delete(x.id); } }
+  for(const id of pm.keys()){ m.setupDel[id]=now; dirty=true; }
+  if(dirty) trackDirty();
+}
+function localDoc(){
+  const m=sm(), doc={ setups:{}, eng:{} };
+  for(const x of SETUPS.list) doc.setups[x.id]={ u:x.u||0, d:x };
+  for(const [id,u] of Object.entries(m.setupDel)) if(!doc.setups[id] || doc.setups[id].u<=u) doc.setups[id]={ u, del:1 };
+  const keys=new Set([...Object.keys(m.hitDel), ...Object.keys(m.cfgU)]);
+  for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i); if(k && k.startsWith('bv_eng::')) keys.add(k); }
+  for(const k of keys){ let o=null; try{ o=JSON.parse(localStorage.getItem(k)||'null'); }catch(e){}
+    const e={ cfgU:m.cfgU[k]||0, cfg:o?JSON.parse(JSON.stringify({...o, list:undefined})):null, hits:{} };
+    for(const h of (o&&o.list)||[]) e.hits[h.id]={ u:h.u||h.t||0, d:h };
+    for(const [id,u] of Object.entries(m.hitDel[k]||{})) if(!e.hits[id] || e.hits[id].u<=u) e.hits[id]={ u, del:1 };
+    doc.eng[k]=e; }
+  return doc;
+}
+function pickNewer(a,b){ if(!a) return b; if(!b) return a; if(a.u!==b.u) return a.u>b.u?a:b; return a.del?a:(b.del?b:a); }
+function mergeDocs(A,B){
+  const out={ setups:{}, eng:{} }, As=A.setups||{}, Bs=B.setups||{}, Ae=A.eng||{}, Be=B.eng||{};
+  for(const id of new Set([...Object.keys(As), ...Object.keys(Bs)])) out.setups[id]=pickNewer(As[id], Bs[id]);
+  for(const k of new Set([...Object.keys(Ae), ...Object.keys(Be)])){
+    const a=Ae[k]||{cfgU:0,cfg:null,hits:{}}, b=Be[k]||{cfgU:0,cfg:null,hits:{}};
+    const au=a.cfgU||0, bu=b.cfgU||0;
+    const e={ cfgU:Math.max(au,bu), cfg: au>bu ? (a.cfg||b.cfg) : bu>au ? (b.cfg||a.cfg) : (a.cfg||b.cfg), hits:{} };
+    for(const id of new Set([...Object.keys(a.hits||{}), ...Object.keys(b.hits||{})])) e.hits[id]=pickNewer((a.hits||{})[id], (b.hits||{})[id]);
+    out.eng[k]=e; }
+  return out;
+}
+function canon(v){ if(Array.isArray(v)) return '['+v.map(canon).join(',')+']';
+  if(v && typeof v==='object') return '{'+Object.keys(v).filter(k=>v[k]!==undefined).sort().map(k=>JSON.stringify(k)+':'+canon(v[k])).join(',')+'}';
+  return JSON.stringify(v); }
+function applyDoc(doc){
+  const m=sm(), curKey=engKey(), before=JSON.stringify(activeSetup());
+  const live=new Map(); for(const [id,e] of Object.entries(doc.setups)) if(!e.del && e.d) live.set(id, e.d);
+  const list=[]; for(const x of SETUPS.list) if(live.has(x.id)){ list.push(live.get(x.id)); live.delete(x.id); }
+  for(const x of live.values()) list.push(x);
+  m.setupDel={}; for(const [id,e] of Object.entries(doc.setups)) if(e.del) m.setupDel[id]=e.u;
+  SETUPS.list=list; if(!allSetups().some(x=>x.id===SETUPS.active)) SETUPS.active=BUILTIN.id;
+  try{ localStorage.setItem('bv_setups', JSON.stringify(SETUPS)); }catch(e){}
+  const setupChanged = JSON.stringify(activeSetup())!==before;
+  let engChangedHere=false; m.hitDel={}; m.cfgU={};
+  for(const [k,e] of Object.entries(doc.eng)){
+    const hits=Object.entries(e.hits);
+    const keep=hits.filter(([,h])=>!h.del && h.d).map(([,h])=>h.d).sort((x,y)=>(x.t||0)-(y.t||0));
+    const dels=hits.filter(([,h])=>h.del); if(dels.length) m.hitDel[k]=Object.fromEntries(dels.map(([id,h])=>[id,h.u]));
+    if(e.cfgU) m.cfgU[k]=e.cfgU;
+    if(!keep.length && !e.cfg && localStorage.getItem(k)==null) continue;
+    const txt=JSON.stringify({ list:keep, ...(e.cfg||{}) });
+    if(localStorage.getItem(k)!==txt){ try{ localStorage.setItem(k, txt); }catch(_){} if(k===curKey) engChangedHere=true; }
+  }
+  smSave();
+  if(setupChanged) useSetup(SETUPS.active);
+  else if(engChangedHere){ ENG=loadEng(); renderAll(); }
+  if($('#dlgSetups').open) renderSetupList();
+  if($('#dlgCal').open) renderEng();
+}
+
+/* Google sign-in (token only lives on this device) and Drive file access */
+function loadGis(){
+  if(window.google && google.accounts && google.accounts.oauth2) return Promise.resolve();
+  if(!gisLoad) gisLoad=new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://accounts.google.com/gsi/client'; s.async=true;
+    s.onload=()=>res(); s.onerror=()=>{ gisLoad=null; rej(new Error('gis')); }; document.head.appendChild(s); });
+  return gisLoad;
+}
+function storedToken(){ try{ const t=JSON.parse(localStorage.getItem('bv_gtoken')||'null'); return t && t.exp>Date.now()+60e3 ? t.access : null; }catch(e){ return null; } }
+async function getToken(interactive){
+  const t=storedToken(); if(t) return t;
+  if(!interactive) return null;
+  await loadGis();
+  return new Promise(resolve=>{
+    const tc=google.accounts.oauth2.initTokenClient({ client_id:GOOGLE_CLIENT_ID, scope:DRIVE_SCOPE,
+      callback:r=>{
+        if(r && r.access_token && google.accounts.oauth2.hasGrantedAllScopes(r, DRIVE_SCOPE)){
+          try{ localStorage.setItem('bv_gtoken', JSON.stringify({ access:r.access_token, exp:Date.now()+(+r.expires_in||3599)*1000 })); }catch(e){}
+          resolve(r.access_token);
+        } else { if(r && r.access_token) toast('The app needs the Google Drive permission to sync'); resolve(null); } },
+      error_callback:()=>resolve(null) });
+    tc.requestAccessToken({ prompt: sm().email ? '' : 'consent', login_hint: sm().email || undefined });
+  });
+}
+async function gfetch(url, opt){
+  const tok=storedToken(); if(!tok) throw Object.assign(new Error('auth'),{auth:true});
+  const r=await fetch(url, { ...(opt||{}), headers:{ ...((opt&&opt.headers)||{}), Authorization:'Bearer '+tok } });
+  if(r.status===401){ try{ localStorage.removeItem('bv_gtoken'); }catch(e){} throw Object.assign(new Error('auth'),{auth:true}); }
+  return r;
+}
+const DRIVE='https://www.googleapis.com/drive/v3', UPLOAD='https://www.googleapis.com/upload/drive/v3';
+async function driveFind(){
+  const m=sm();
+  if(m.fileId){ const r=await gfetch(`${DRIVE}/files/${m.fileId}?fields=id,trashed`);
+    if(r.ok){ const f=await r.json(); if(!f.trashed) return f.id; } else if(r.status!==404) throw new Error('drive '+r.status); }
+  const q=encodeURIComponent(`name='${SYNC_FILE}' and trashed=false`);
+  const r=await gfetch(`${DRIVE}/files?q=${q}&spaces=drive&orderBy=modifiedTime desc&fields=files(id)`);
+  if(!r.ok) throw new Error('drive '+r.status);
+  const f=(await r.json()).files||[]; return f.length ? f[0].id : null;
+}
+async function driveWrite(id, body){
+  if(id){ const r=await gfetch(`${UPLOAD}/files/${id}?uploadType=media&fields=id`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body });
+    if(!r.ok) throw new Error('drive '+r.status); return id; }
+  const b='bv'+Math.random().toString(36).slice(2);
+  const meta=JSON.stringify({ name:SYNC_FILE, mimeType:'application/json', description:'Ballistic Visualizer: hits, calibration and setups. Written by the app, do not edit by hand.' });
+  const r=await gfetch(`${UPLOAD}/files?uploadType=multipart&fields=id`, { method:'POST', headers:{'Content-Type':'multipart/related; boundary='+b},
+    body:`--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${meta}\r\n--${b}\r\nContent-Type: application/json\r\n\r\n${body}\r\n--${b}--` });
+  if(!r.ok) throw new Error('drive '+r.status); return (await r.json()).id;
+}
+
+/* One sync: download, merge item by item, save here, upload if anything is new */
+function syncNow(interactive){
+  if(!GOOGLE_CLIENT_ID) return Promise.resolve(false);
+  if(syncRun){ syncAgain=true; return syncRun; }
+  clearTimeout(syncT);
+  syncRun=(async()=>{
+    const m=sm();
+    try{
+      if(!navigator.onLine){ setSyncUi('offline'); return false; }
+      setSyncUi('busy');
+      const tok=await getToken(interactive);
+      if(!tok){ setSyncUi(m.email ? 'expired' : 'off'); return false; }
+      if(!m.email){ const r=await gfetch(`${DRIVE}/about?fields=user(displayName,emailAddress)`); if(r.ok){ const u=(await r.json()).user||{}; m.email=u.emailAddress||'your account'; m.name=u.displayName||''; smSave(); } }
+      const id=await driveFind();
+      let remote={ setups:{}, eng:{} };
+      if(id){ const r=await gfetch(`${DRIVE}/files/${id}?alt=media`); if(!r.ok) throw new Error('drive '+r.status);
+        try{ const o=await r.json(); if(o && o.app==='ballistic-visualizer') remote=o; }catch(e){} }
+      const seq=syncSeq, merged=mergeDocs(localDoc(), remote);   // synchronous from here to applyDoc, so no local change slips in between
+      applyDoc(merged);
+      let fileId=id;
+      if(!id || canon({s:merged.setups,e:merged.eng})!==canon({s:remote.setups||{},e:remote.eng||{}})){
+        fileId=await driveWrite(id, JSON.stringify({ app:'ballistic-visualizer', schema:1, saved:new Date().toISOString(), setups:merged.setups, eng:merged.eng })); }
+      m.fileId=fileId; m.last=Date.now(); if(syncSeq===seq) m.dirty=false; smSave();
+      setSyncUi(m.dirty ? 'pending' : 'ok');
+      if(m.dirty) syncSoon();
+      return true;
+    }catch(e){
+      if(e && e.auth) setSyncUi('expired');
+      else { setSyncUi('error'); if(interactive) toast("Couldn't sync with Google Drive. Try again in a moment."); }
+      return false;
+    }finally{
+      syncRun=null; if(syncAgain){ syncAgain=false; syncSoon(); }
+    }
+  })();
+  return syncRun;
+}
+function syncSoon(){ if(!syncOn()) return; clearTimeout(syncT); syncT=setTimeout(()=>{ if(storedToken()) syncNow(false); else setSyncUi('expired'); }, 2000); }
+function ago(t){ const s=(Date.now()-t)/1000; return s<60?'just now':s<3600?`${Math.round(s/60)} min ago`:s<86400?`${Math.round(s/3600)} h ago`:new Date(t).toLocaleDateString(); }
+function setSyncUi(st){ syncUi=st; renderSync(); }
+function renderSync(){
+  const m=sm(), on=syncOn(), b=$('#btnSync');
+  b.hidden=!on;
+  const st = !on ? 'off' : syncUi==='busy' ? 'busy' : syncUi==='offline' || syncUi==='error' ? 'off' : (m.dirty || syncUi==='expired') ? (m.dirty?'pending':'expired') : 'ok';
+  b.dataset.s=st;
+  const lbl={ ok:'Synced', busy:'Syncing', pending:'Sync', expired:'Sync', off: syncUi==='offline'?'Offline':'Sync' }[st];
+  $('#syncLbl').textContent=lbl;
+  b.title = st==='ok' ? `Synced with Google Drive ${ago(m.last)}` : st==='busy' ? 'Syncing with Google Drive' : st==='pending' ? 'Changes waiting. Tap to sync with Google Drive' :
+            st==='expired' ? 'Tap to reconnect and sync with Google Drive' : syncUi==='offline' ? 'Offline. Changes are saved here and sync later' : "Couldn't reach Google Drive. Tap to try again";
+  const cfgOk=!!GOOGLE_CLIENT_ID;
+  $('#syncConnect').hidden=on; $('#syncConnect').disabled=!cfgOk || syncUi==='busy';
+  $('#syncNowBtn').hidden=!on; $('#syncNowBtn').disabled=syncUi==='busy'; $('#syncOff').hidden=!on;
+  $('#syncState').textContent = !cfgOk ? "Sync isn't set up in this copy of the app yet." :
+    !on ? (syncUi==='busy' ? 'Connecting…' : 'Not connected. Hits are saved on this device only.') :
+    `Connected as ${m.email}. ` + (syncUi==='busy' ? 'Syncing…' : syncUi==='offline' ? 'Offline: changes are saved here and sync when the connection is back.' :
+      syncUi==='error' ? "Last attempt couldn't reach Google Drive." : m.dirty ? 'Changes waiting to sync.' : m.last ? `Last synced ${ago(m.last)}.` : '');
+}
+$('#btnSync').onclick=()=>syncNow(true);
+$('#syncNowBtn').onclick=()=>syncNow(true).then(ok=>{ if(ok) toast('Synced with Google Drive'); });
+$('#syncConnect').onclick=()=>{ syncUi='busy'; renderSync(); syncNow(true).then(ok=>{ if(ok) toast('Google Drive connected'); else { if(!sm().email) syncUi='off'; renderSync(); } }); };
+$('#syncOff').onclick=()=>{
+  const m=sm(), t=storedToken();
+  if(t && window.google && google.accounts && google.accounts.oauth2) try{ google.accounts.oauth2.revoke(t, ()=>{}); }catch(e){}
+  try{ localStorage.removeItem('bv_gtoken'); }catch(e){}
+  m.email=null; m.name=null; m.fileId=null; smSave(); setSyncUi('off'); toast('Disconnected. Your data stays on this device.');
+};
+$('#btnSet').addEventListener('click', ()=>{ renderSync(); if(GOOGLE_CLIENT_ID) loadGis().catch(()=>{}); });
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible' && syncOn() && storedToken() && Date.now()-sm().last>30e3) syncNow(false); else renderSync(); });
+addEventListener('online', ()=>{ if(syncOn()) syncNow(false); });
+addEventListener('offline', ()=>{ if(syncOn()) setSyncUi('offline'); });
+setInterval(()=>{ if(syncOn()) renderSync(); }, 60e3);
+if(syncOn()){ syncUi = storedToken() ? 'ok' : 'expired'; loadGis().catch(()=>{}); setTimeout(()=>syncNow(false), 600); }
+renderSync();
 
 /* ---------- Import table ---------- */
 function parseTable(text){
