@@ -1,11 +1,12 @@
 /* Ballistic Visualizer service worker: the app works offline after the first visit. */
-const VERSION = 'bv-2026-10-23-1';
+const VERSION = 'bv-2026-10-23-2';
 const SHELL = [
   './', './index.html', './manifest.webmanifest',
   './icon-192.png', './icon-512.png', './maskable-192.png', './maskable-512.png',
   './apple-touch-icon.png', './favicon-32.png'
 ];
 const FONT_CACHE = 'bv-fonts';
+const ICON_CACHE = 'bv-icons';   // weapon, barrel and ammo pictures from tarkov.dev
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL)));
@@ -13,7 +14,7 @@ self.addEventListener('install', e => {
 
 self.addEventListener('activate', e => {
   e.waitUntil((async () => {
-    for (const k of await caches.keys()) if (k !== VERSION && k !== FONT_CACHE) await caches.delete(k);
+    for (const k of await caches.keys()) if (k !== VERSION && k !== FONT_CACHE && k !== ICON_CACHE) await caches.delete(k);
     await self.clients.claim();
   })());
 });
@@ -34,6 +35,12 @@ self.addEventListener('fetch', e => {
       const net = fetch(req).then(r => { if (r && (r.ok || r.type === 'opaque')) cache.put(req, r.clone()); return r; }).catch(() => null);
       return hit || (await net) || new Response('', { status: 504 });
     })());
+    return;
+  }
+  // Item pictures: once seen, they stay available offline.
+  if (url.hostname === 'assets.tarkov.dev') {
+    e.respondWith(caches.open(ICON_CACHE).then(async cache => (await cache.match(req)) ||
+      fetch(req).then(r => { if (r && (r.ok || r.type === 'opaque')) cache.put(req, r.clone()); return r; })));
     return;
   }
   if (url.origin !== self.location.origin) return;

@@ -327,6 +327,33 @@ dialog.modal:not([open]){opacity:0;transform:translateY(8px) scale(.98)}
   transition:opacity .2s,transform .25s var(--ease)}
 .toast.show{opacity:1;transform:translate(-50%,0)}
 
+/* Setups */
+.su-list{list-style:none;margin:12px 0 0;padding:0;display:grid;gap:8px}
+.su-item{display:flex;align-items:stretch;border:1px solid var(--line);border-radius:12px;background:var(--ground);overflow:hidden}
+.su-item.on{border-color:var(--fde);box-shadow:inset 3px 0 0 var(--fde)}
+.su-main{flex:1;min-width:0;display:flex;align-items:center;gap:12px;padding:10px 12px;background:transparent;border:0;text-align:left;cursor:pointer;color:var(--bone)}
+.su-main:hover{background:rgba(255,255,255,.03)}
+.su-main img{width:64px;height:40px;object-fit:contain;flex:none}
+.su-main .ph{width:64px;height:40px;flex:none;border-radius:8px;background:var(--plate-2);display:grid;place-items:center;color:var(--dust-2);font:600 12px/1 var(--f-num)}
+.su-main b{display:block;font-weight:600;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.su-main small{display:block;color:var(--dust);font-size:13px;margin-top:2px}
+.su-act{display:flex;align-items:center;gap:2px;padding-right:6px}
+.su-act button{height:34px;padding:0 10px;border:0;border-radius:8px;background:transparent;color:var(--dust);cursor:pointer;font-size:13px}
+.su-act button:hover{background:rgba(255,255,255,.06);color:var(--bone)}
+.su-act button.del:hover{color:#FF9E8A}
+.tagx{display:inline-block;margin-left:6px;padding:2px 7px;border-radius:999px;background:var(--plate-3);color:var(--dust);font:600 11px/1.3 var(--f-ui);vertical-align:2px}
+.su-item.on .tagx.act{background:rgba(205,168,111,.18);color:var(--fde)}
+.pick-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px 14px;margin-top:10px}
+.pick{display:flex;align-items:center;gap:8px}
+.pick img{width:52px;height:34px;object-fit:contain;flex:none;border-radius:6px;background:var(--plate-2)}
+.pick select{flex:1;min-width:0}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px 14px;margin-top:10px}
+.calc{margin:10px 0 0;font-size:14px;color:var(--dust)}
+.calc b{font:600 17px/1 var(--f-num);color:var(--bone)}
+.prev td{font-size:16px}
+.prev tbody tr{cursor:default}
+@media (max-width:520px){ .grid3{grid-template-columns:repeat(2,minmax(0,1fr))} .su-main img,.su-main .ph{width:48px} }
+
 /* Update banner (new version of the app) */
 .updbar{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:110;display:flex;align-items:center;gap:10px;
   padding:8px 8px 8px 16px;border-radius:14px;background:var(--plate-3);border:1px solid var(--line-2);box-shadow:0 12px 30px rgba(0,0,0,.5);font-size:14px;white-space:nowrap}
@@ -639,13 +666,11 @@ dialog.modal:not([open]){opacity:0;transform:translateY(8px) scale(.98)}
       <p class="hint" id="calNote" style="margin-top:8px"></p>
     </div>
     <div class="sec" id="tableSec">
-      <h3>Drop table</h3>
+      <h3>Current setup</h3>
       <dl class="kv" id="kvSetup" style="margin-top:10px"></dl>
       <div class="row" style="margin-top:14px">
-        <button class="btn" id="btnImport" type="button">Import a table</button>
-        <button class="btn quiet" id="btnReset" type="button">Restore DVL-10 table</button>
+        <button class="btn primary" id="btnOpenSetups" type="button">Manage setups</button>
       </div>
-      <p class="hint" style="margin-top:8px">Generate a drop table on tarkovgunsmith.com, copy its rows and import them to load another setup. Hits are kept per table.</p>
     </div>
     <div class="sec" id="appSec">
       <h3>App</h3>
@@ -665,6 +690,90 @@ dialog.modal:not([open]){opacity:0;transform:translateY(8px) scale(.98)}
         <dt><kbd>C</kbd></dt><dd style="margin:0">Calibrated on / off</dd>
         <dt><kbd>F</kbd></dt><dd style="margin:0">Full screen</dd>
       </dl>
+    </div>
+  </div>
+</dialog>
+
+<!-- Setups library -->
+<dialog class="sheet" id="dlgSetups" aria-labelledby="suTitle">
+  <div class="sheet-head"><h2 id="suTitle">Setups</h2><button class="btn quiet" data-close type="button">Close</button></div>
+  <div class="sheet-body">
+    <div class="sec">
+      <p>Each setup is a weapon, barrel and ammo with its own drop table, hits and calibration. Tap one to use it.</p>
+      <ul class="su-list" id="suList"></ul>
+      <div class="row" style="margin-top:14px">
+        <button class="btn primary" id="btnNewSetup" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>New setup</button>
+        <button class="btn" id="btnImport" type="button">Import from tarkovgunsmith</button>
+      </div>
+    </div>
+    <div class="sec">
+      <h3>Game data</h3>
+      <p id="gdState">Not downloaded yet.</p>
+      <div class="row"><button class="btn" id="gdBtn" type="button">Download game data</button></div>
+      <p class="hint" style="margin-top:8px">Weapons, barrels and ammo come from tarkov.dev. They are saved on this device, so building setups works offline after the first download.</p>
+    </div>
+  </div>
+</dialog>
+
+<!-- Setup builder -->
+<dialog class="sheet" id="dlgBuild" aria-labelledby="bTitle">
+  <div class="sheet-head"><h2 id="bTitle">New setup</h2><button class="btn quiet" data-close type="button">Cancel</button></div>
+  <div class="sheet-body">
+    <div class="note" id="bData" hidden></div>
+    <div class="sec">
+      <h3>Weapon</h3>
+      <div class="pick-grid">
+        <label class="fld">Caliber<select id="bCal"></select></label>
+        <label class="fld">Weapon<span class="pick"><img id="bWIcon" alt="" hidden><select id="bWeapon"></select></span></label>
+        <label class="fld">Barrel<span class="pick"><img id="bBIcon" alt="" hidden><select id="bBarrel"></select></span></label>
+        <label class="fld">Ammo<span class="pick"><img id="bAIcon" alt="" hidden><select id="bAmmo"></select></span></label>
+      </div>
+      <label class="fld" style="margin-top:12px">Name<input id="bName" placeholder="Weapon, barrel, ammo"></label>
+    </div>
+    <div class="sec">
+      <h3>Velocity</h3>
+      <div class="grid3">
+        <label class="fld n">Weapon (%)<input id="bVelW" type="number" step="0.01"></label>
+        <label class="fld n">Barrel (%)<input id="bVelB" type="number" step="0.01"></label>
+        <label class="fld n">Additional (%)<input id="bVelA" type="number" step="0.1" value="0"></label>
+      </div>
+      <p class="calc" id="bVelOut"></p>
+      <details>
+        <summary>Ammo values</summary>
+        <div class="grid3" style="margin-top:10px">
+          <label class="fld n">Initial speed (m/s)<input id="bSpeed" type="number" step="0.1"></label>
+          <label class="fld n">Ballistic coeff.<input id="bBC" type="number" step="0.001"></label>
+          <label class="fld n">Damage<input id="bDmg" type="number" step="1"></label>
+          <label class="fld n">Penetration<input id="bPen" type="number" step="1"></label>
+          <label class="fld n">Zero ammo speed<input id="bDefSpeed" type="number" step="0.1"></label>
+          <label class="fld n">Zero ammo BC<input id="bDefBC" type="number" step="0.001"></label>
+        </div>
+        <p class="hint" style="margin-top:8px" id="bDefNote">The zero is set with the weapon's default ammo, like the game does.</p>
+      </details>
+    </div>
+    <div class="sec">
+      <h3>Accuracy</h3>
+      <div class="grid3">
+        <label class="fld n">Barrel / weapon (CRad)<input id="bCrad" type="number" step="0.001"></label>
+        <label class="fld n">Ammo accuracy<input id="bAmmoAcc" type="number" step="1"></label>
+        <label class="fld n">Additional (%)<input id="bAddAcc" type="number" step="1" value="0"></label>
+      </div>
+      <p class="calc" id="bAccOut"></p>
+    </div>
+    <div class="sec">
+      <h3>Zero and range</h3>
+      <div class="grid3">
+        <label class="fld">Zero<select id="bZero"></select></label>
+        <label class="fld n">Height over bore (mm)<input id="bHob" type="number" step="0.01" value="68.58"></label>
+        <label class="fld n">Max range (m)<input id="bMax" type="number" step="50" min="100" max="1500" value="650"></label>
+      </div>
+    </div>
+    <div class="sec">
+      <h3>Preview</h3>
+      <div class="tablebox" style="padding:0;max-height:none"><table class="prev"><thead><tr><th>Range</th><th class="ch c">Reticle MOA</th><th class="cd c">Drop cm</th><th>Speed</th><th>Damage</th><th>Pen.</th></tr></thead><tbody id="bPrev"></tbody></table></div>
+      <div class="row" style="margin-top:16px;justify-content:flex-end">
+        <button class="btn primary" id="bSave" type="button">Save and use</button>
+      </div>
     </div>
   </div>
 </dialog>
@@ -745,7 +854,22 @@ function loadSaved(){ try{ const t=localStorage.getItem('bv_dataset'); if(t){ co
 function saveSet(ds){ try{ localStorage.setItem('bv_dataset', JSON.stringify(ds)); }catch(e){} }
 function clearSaved(){ try{ localStorage.removeItem('bv_dataset'); }catch(e){} }
 
-let DS = loadSaved() || DEFAULT_SET;
+/* ---------- Setups: each one is a drop table with its own hits ---------- */
+const BUILTIN = {...DEFAULT_SET, id:'builtin-dvl', kind:'builtin', name:'DVL-10, 500mm, M80', engKey:'bv_eng::'+DEFAULT_SET.label};
+function loadSetups(){
+  let o=null; try{ o=JSON.parse(localStorage.getItem('bv_setups')||'null'); }catch(e){}
+  if(!o || !Array.isArray(o.list)){
+    o={active:BUILTIN.id, list:[]};
+    const legacy=loadSaved();                       // a table imported with an earlier version
+    if(legacy){ const id='imp-'+Date.now().toString(36); o.list.push({...legacy, id, kind:'imported', name:legacy.label, engKey:'bv_eng::'+(legacy.label||'table')}); o.active=id; }
+  }
+  return o;
+}
+let SETUPS = loadSetups();
+const allSetups = () => [BUILTIN, ...SETUPS.list];
+const activeSetup = () => allSetups().find(x=>x.id===SETUPS.active) || BUILTIN;
+function saveSetups(){ try{ localStorage.setItem('bv_setups', JSON.stringify(SETUPS)); }catch(e){ toast('Could not save: storage is full'); } }
+let DS = activeSetup();
 state.cal = DS.baseCal;
 const maxDist = () => DS.rows[DS.rows.length-1][0];
 
@@ -803,7 +927,7 @@ function corrAt(C, x, cal){
   const th = C.fixedZero ? C.a*gAt(cal)/cal : C.th;
   return -C.a*gAt(x) + th*x;
 }
-const engKey=()=>'bv_eng::'+(DS.label||'table');
+const engKey=()=>DS.engKey || ('bv_eng::'+(DS.label||'table'));
 function loadEng(){
   const def={ list:[], zero:DS.baseCal, fitZero:true, unit:'marks', apply:true };
   try{ const t=localStorage.getItem(engKey()); if(t){ const o=JSON.parse(t); if(o && Array.isArray(o.list)) return {...def, ...o}; } }catch(e){}
@@ -1243,8 +1367,10 @@ function renderSettings(){
   $('#rngNote').textContent = `The rail, dials, drop chart and DOPE card show ${viewMin()}–${viewMax()} m. The table goes to ${maxD} m.`;
   $('#calNote').textContent = state.cal===DS.baseCal ? 'Zero distance of the imported table.' : `Approximate re-zero from the ${DS.baseCal} m table.`;
   const m=DS.meta||{};
-  const pairs = DS.meta ? [['Weapon',m.weapon],['Barrel',m.barrel],['Ammo',m.ammo],['Penetration',m.pen],['Damage',m.dmg],['Initial speed',m.speed],['Ballistic coefficient',m.bc],['Table zero',DS.baseCal+' m'],['Max range',maxD+' m']]
-                        : [['Name',DS.label],['Table zero',DS.baseCal+' m'],['Max range',maxD+' m']];
+  const pairs = DS.meta ? [['Weapon',m.weapon],['Barrel',m.barrel],['Ammo',m.ammo],['Penetration',m.pen],['Damage',m.dmg],['Initial speed',m.speed],['Ballistic coefficient',m.bc],
+                           ...(m.velMod?[['Velocity multiplier','×'+m.velMod]]:[]), ...(m.moa?[['Accuracy',m.moa+' Tarkov MOA']]:[]), ...(m.hob?[['Height over bore',m.hob]]:[]),
+                           ['Table zero',DS.baseCal+' m'],['Max range',maxD+' m'],['Source',DS.kind==='generated'?'Built in this app':DS.kind==='imported'?'Imported table':'tarkovgunsmith.com']]
+                        : [['Name',DS.label],['Table zero',DS.baseCal+' m'],['Max range',maxD+' m'],['Source','Imported table']];
   $('#kvSetup').innerHTML=pairs.map(([k,v])=>`<dt>${k}</dt><dd>${v??'—'}</dd>`).join('');
 }
 function renderSetupChip(){
@@ -1497,7 +1623,7 @@ function renderHitsToggle(){ $('#hitsBox').classList.toggle('open',hitsOpen); $(
   $('#hitsLbl').textContent = hitsOpen ? 'Hide logged hits' : `Show logged hits (${ENG.list.length})`; }
 $('#btnHits').onclick=()=>{ hitsOpen=!hitsOpen; renderHitsToggle(); };
 $('#btnSet').onclick=()=>{ renderSettings(); renderAppState(); openSheet($('#dlgSet')); };
-$('#btnSetup').onclick=()=>{ renderSettings(); openSheet($('#dlgSet')); setTimeout(()=>$('#tableSec').scrollIntoView({block:'start'}),60); };
+$('#btnSetup').onclick=openSetups;
 
 /* ---------- Events: readout ---------- */
 $('#vMinus').onclick=()=>stepPan(-1); $('#vPlus').onclick=()=>stepPan(1);
@@ -1616,6 +1742,290 @@ $('#eFile').onchange=async e=>{ const f=e.target.files[0]; if(!f) return;
   }catch(err){ toast('That file is not a hits export'); }
   e.target.value=''; };
 
+/* Builds the compact ballistic dataset from json.tarkov.dev (/regular/items + /regular/items_en).
+   Output: { v, src, cal:{id:label}, w:[...], b:{...}, a:{...} } */
+function extractGameData(itemsJson, textsJson){
+  const it = itemsJson.data.items, tx = textsJson.data;
+  const shortN = id => tx[id+' ShortName'] || id, fullN = id => tx[id+' Name'] || shortN(id);
+  const all = Object.values(it);
+  const isBarrel = id => it[id] && it[id].properties && it[id].properties.propertiesType === 'ItemPropertiesBarrel';
+  const barrelsOf = gid => { const seen = new Set(), out = [], stack = [gid];
+    while (stack.length) { const id = stack.pop(); if (seen.has(id)) continue; seen.add(id);
+      const p = it[id] && it[id].properties; if (!p) continue;
+      if (id !== gid && isBarrel(id)) out.push(id);
+      for (const s of (p.slots || [])) for (const a of ((s.filters && s.filters.allowedItems) || [])) stack.push(a); }
+    return out; };
+  const r = (x, d=4) => x == null ? null : Math.round(x * 10**d) / 10**d;
+  const SKIP_CAL = new Set(['Caliber20x1mm', 'Caliber40x46', 'Caliber40mmRU', 'Caliber26x75', 'Caliber30x29', 'Caliber725']);
+  const out = { v: null, src: 'json.tarkov.dev', cal: {}, w: [], b: {}, a: {} };
+  let newest = '';
+  for (const x of all) {
+    const p = x.properties;
+    if (x.updated && x.updated > newest) newest = x.updated;
+    if (p && p.propertiesType === 'ItemPropertiesAmmo' && p.caliber && !SKIP_CAL.has(p.caliber)) {
+      out.a[x.id] = [shortN(x.id), fullN(x.id), p.caliber, r(p.initialSpeed,2), r(p.ballisticCoeficient), r(p.bulletDiameterMilimeters,3), r(p.bulletMassGrams,3),
+        p.damage, p.penetrationPower, r((p.accuracyModifier || 0) * 100, 2), p.projectileCount || 1, p.ammoType || ''];
+    }
+  }
+  for (const x of all) {
+    const p = x.properties;
+    if (!(x.types || []).includes('gun') || !p || p.propertiesType !== 'ItemPropertiesWeapon') continue;
+    if (!p.caliber || SKIP_CAL.has(p.caliber) || !p.defaultAmmo) continue;
+    const bs = barrelsOf(x.id);
+    for (const id of bs) if (!out.b[id]) out.b[id] = [shortN(id), r(it[id].velocity || 0, 3), r(it[id].properties.centerOfImpact, 4)];
+    out.w.push([x.id, shortN(x.id), fullN(x.id), p.caliber, r(x.velocity || 0, 3), r(p.centerOfImpact, 4), p.defaultAmmo, bs]);
+  }
+  // Caliber labels: longest common leading words of the ammo full names of that caliber (e.g. "7.62x51mm")
+  const byCal = {};
+  for (const [id, a] of Object.entries(out.a)) (byCal[a[2]] = byCal[a[2]] || []).push(a[1]);
+  for (const w of out.w) {
+    const names = byCal[w[3]] || byCal[w[3] === 'Caliber9x18PMM' ? 'Caliber9x18PM' : ''] || [];
+    let lbl = '';
+    if (names.length) { const tok = names.map(n => n.split(' ')); let k = 0;
+      while (tok.every(t => t[k] && t[k] === tok[0][k]) && k < tok[0].length - 1) k++;
+      lbl = tok[0].slice(0, Math.max(1, k)).join(' '); }
+    out.cal[w[3]] = lbl || w[3].replace(/^Caliber/, '');
+  }
+  out.w.sort((a, b) => a[1].localeCompare(b[1]));
+  out.v = newest.slice(0, 10);
+  return out;
+}
+/* Ballistic table generator: independent re-implementation of the method tarkovgunsmith documents and uses.
+   0.01 s steps, G1 drag (EFT-style index lookup, 343 m/s), zero computed with the weapon's default ammo. */
+const Ballistics = (() => {
+  const G1 = [[0,.2629],[.05,.2558],[.1,.2487],[.15,.2413],[.2,.2344],[.25,.2278],[.3,.2214],[.35,.2155],[.4,.2104],[.45,.2061],[.5,.2032],[.55,.202],[.6,.2034],[.7,.2165],[.725,.223],[.75,.2313],[.775,.2417],[.8,.2546],[.825,.2706],[.85,.2901],[.875,.3136],[.9,.3415],[.925,.3734],[.95,.4084],[.975,.4448],[1,.4805],[1.025,.5136],[1.05,.5427],[1.075,.5677],[1.1,.5883],[1.125,.6053],[1.15,.6191],[1.2,.6393],[1.25,.6518],[1.3,.6589],[1.35,.6621],[1.4,.6625],[1.45,.6607],[1.5,.6573],[1.55,.6528],[1.6,.6474],[1.65,.6413],[1.7,.6347],[1.75,.628],[1.8,.621],[1.85,.6141],[1.9,.6072],[1.95,.6003],[2,.5934],[2.05,.5867],[2.1,.5804],[2.15,.5743],[2.2,.5685],[2.25,.563],[2.3,.5577],[2.35,.5527],[2.4,.5481],[2.45,.5438],[2.5,.5397],[2.6,.5325],[2.7,.5264],[2.8,.5211],[2.9,.5168],[3,.5133],[3.1,.5105],[3.2,.5084],[3.3,.5067],[3.4,.5054],[3.5,.504],[3.6,.503],[3.7,.5022],[3.8,.5016],[3.9,.501],[4,.5006],[4.2,.4998],[4.4,.4995],[4.6,.4992],[4.8,.499],[5,.4988]];
+  const SOUND = 343, DT = 0.01, G = 9.81, K = 1.2 * Math.PI / 4 * 0.0014223 / 2;
+  function cd(v) {
+    const n = Math.floor(v / SOUND / 0.05);
+    if (n <= 0) return 0;
+    if (n > G1.length - 1) return G1[G1.length - 1][1];
+    const [m0, c0] = G1[n - 1], [m1, c1] = G1[n], v0 = m0 * SOUND, v1 = m1 * SOUND;
+    return (c1 - c0) / (v1 - v0) * (v - v0) + c0;
+  }
+  // Flight path: [x, y, horizontal speed, step index] per step until x > maxDist
+  function fly(v0, bc, angle, maxDist) {
+    let x = 0, y = 0, vx = v0 * Math.cos(angle), vy = v0 * Math.sin(angle);
+    const pts = [[0, 0, v0, 0]];
+    for (let i = 1; i < 20000; i++) {
+      const v = Math.hypot(vx, vy); if (v <= 1) break;
+      const a = -K * cd(v) * v * v / bc, ax = a * vx / v, ay = a * vy / v - G;
+      x += vx * DT + 0.5 * ax * DT * DT; y += vy * DT + 0.5 * ay * DT * DT;
+      vx += ax * DT; vy += ay * DT;
+      pts.push([x, y, vx, i]);
+      if (x > maxDist) break;
+    }
+    return pts;
+  }
+  function sample(pts, D) {          // y interpolated at D; speed and step of the first step reaching D
+    for (let j = 1; j < pts.length; j++) if (pts[j][0] >= D) {
+      const [x0, y0] = pts[j - 1], [x1, y1, s1, i1] = pts[j];
+      return { y: y0 + (y1 - y0) * (D - x0) / (x1 - x0), speed: s1, step: i1 };
+    }
+    return null;
+  }
+  function ammoAccFactor(acc) { return acc <= 0 ? (100 + Math.abs(acc)) / 100 : 100 / (100 + acc); }
+  /* p: { defSpeed, defBC, speed, bc, damage, penetration, velMult, zero, hob (m), maxDist, step,
+          cradBase, ammoAcc (game units, e.g. -5), addAcc (%, e.g. 15) } */
+  function table(p) {
+    const vm = p.velMult || 1, v0 = p.speed * vm, dv0 = p.defSpeed * vm, hob = p.hob, maxD = p.maxDist || 650;
+    const flat = fly(dv0, p.defBC, 0, Math.max(p.zero + 20, 60));
+    const z = sample(flat, p.zero);
+    const angle = Math.atan((hob - z.y) / p.zero);
+    const path = fly(v0, p.bc, angle, maxD + 20);
+    const crad = (p.cradBase || 0) * ammoAccFactor(p.ammoAcc || 0) * ((100 - (p.addAcc || 0)) / 100);
+    const rows = [[0, p.penetration, p.damage, v0, -hob * 100, 0, 0]];
+    const step = p.step || 5;
+    for (let D = step; D <= maxD + 1e-9; D += step) {
+      const s = sample(path, D); if (!s) break;
+      const f = 0.5 + 0.5 * Math.min(1, Math.max(0, s.speed / v0));
+      const tof = (s.step + (s.step > 100 ? 1 : 0)) * DT;
+      rows.push([D, p.penetration * f, p.damage * f, s.speed, (s.y - hob) * 100, D * crad, tof]);
+    }
+    return { rows, angle, crad, tarkovMOA: 100 * crad / 2.909, muzzle: v0 };
+  }
+  return { table, cd, fly, sample, ammoAccFactor };
+})();
+
+/* ---------- Game data (tarkov.dev) ---------- */
+const GD_URL='https://json.tarkov.dev/regular/';
+const CAL_FIX={Caliber762x35:'.300 Blackout', Caliber784x49:'.308 ME', Caliber9x18PM:'9x18mm PM', Caliber9x18PMM:'9x18mm PMM', Caliber127x99:'.50 BMG', Caliber86x70:'.338 Lapua Magnum'};
+let GD=null; try{ GD=JSON.parse(localStorage.getItem('bv_gamedata')||'null'); }catch(e){}
+let gdBusy=null;
+function gdSummary(){ return GD ? `From tarkov.dev, game data of ${GD.v}: ${GD.w.length} weapons, ${Object.keys(GD.b).length} barrels, ${Object.keys(GD.a).length} ammo.` : 'Not downloaded yet.'; }
+function renderGd(){ $('#gdState').textContent = gdBusy ? 'Downloading from tarkov.dev…' : gdSummary(); $('#gdBtn').textContent = GD ? 'Update game data' : 'Download game data'; $('#gdBtn').disabled=!!gdBusy; }
+async function downloadGameData(silent){
+  if(gdBusy) return gdBusy;
+  gdBusy=(async()=>{
+    renderGd();
+    try{
+      const [items,texts]=await Promise.all([fetch(GD_URL+'items',{cache:'no-cache'}).then(r=>{ if(!r.ok) throw new Error(r.status); return r.json(); }), fetch(GD_URL+'items_en',{cache:'no-cache'}).then(r=>r.json())]);
+      const d=extractGameData(items,texts); d.fetched=Date.now();
+      if(!d.w.length) throw new Error('empty');
+      const was=GD&&GD.v; GD=d; try{ localStorage.setItem('bv_gamedata', JSON.stringify(d)); }catch(e){}
+      if(!silent) toast(was===d.v ? 'Game data is up to date' : 'Game data downloaded');
+      return true;
+    }catch(e){ if(!silent) toast("Couldn't reach tarkov.dev. Check the connection."); return false; }
+    finally{ gdBusy=null; renderGd(); if($('#dlgBuild').open) fillCalibers(); }
+  })();
+  return gdBusy;
+}
+$('#gdBtn').onclick=()=>downloadGameData(false);
+const gdWeapon=id=>GD&&GD.w.find(w=>w[0]===id);
+const calLabel=c=>CAL_FIX[c] || (GD&&GD.cal[c]) || String(c||'').replace(/^Caliber/,'');
+const ammoCal=c=>c==='Caliber9x18PMM' ? ['Caliber9x18PMM','Caliber9x18PM'] : [c];
+const icon=id=>`https://assets.tarkov.dev/${id}-icon.webp`;
+const variant=full=>{ const m=/\(([^)]+)\)\s*$/.exec(full||''); return m ? ` (${m[1]})` : ''; };
+
+/* ---------- Setups sheet ---------- */
+function hitsOf(s){ try{ const o=JSON.parse(localStorage.getItem(s.engKey||('bv_eng::'+(s.label||'table')))||'null'); return o&&o.list?o.list.length:0; }catch(e){ return 0; } }
+function setupSub(s){ const m=s.meta||{}, parts=[`zero ${s.baseCal} m`];
+  if(m.speed) parts.push(m.speed); const n=hitsOf(s); if(n) parts.push(`${n} hit${n===1?'':'s'}`);
+  return parts.join(', '); }
+function renderSetupList(){
+  const esc=t=>String(t??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  $('#suList').innerHTML = allSetups().map(s=>{ const on=s.id===SETUPS.active, wid=s.params&&s.params.weaponId;
+    const img = wid ? `<img src="${icon(wid)}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'ph',textContent:${JSON.stringify(((s.meta&&s.meta.weapon)||'').slice(0,4)||'—').replace(/"/g,'&quot;')}}))">`
+                    : `<span class="ph">${s.kind==='imported'?'TXT':'DVL'}</span>`;
+    return `<li class="su-item${on?' on':''}" data-id="${s.id}">
+      <button class="su-main" type="button" data-use="${s.id}">${img}<span style="min-width:0"><b>${esc(s.name||s.label)}${on?'<span class="tagx act">In use</span>':''}${s.kind==='builtin'?'<span class="tagx">Sample</span>':''}</b><small>${esc(setupSub(s))}</small></span></button>
+      <span class="su-act">${s.kind==='generated'?`<button type="button" data-edit="${s.id}">Edit</button>`:''}${s.kind==='generated'?`<button type="button" data-dup="${s.id}">Copy</button>`:''}${s.kind!=='builtin'?`<button type="button" class="del" data-del="${s.id}" aria-label="Delete ${esc(s.name||s.label)}">✕</button>`:''}</span></li>`; }).join('');
+}
+function useSetup(id){
+  SETUPS.active=id; saveSetups(); DS=activeSetup(); state.cal=DS.baseCal; fitCache=null; brCache=null; gCache=null; ENG=loadEng();
+  const [a,b]=distBounds(); if(state.dist<a||state.dist>b) state.dist=Math.min(b,Math.max(a,state.dist));
+  renderAll();
+}
+function openSetups(){ renderSetupList(); renderGd(); openSheet($('#dlgSetups'));
+  if(GD && navigator.onLine && Date.now()-(GD.fetched||0) > 7*864e5) downloadGameData(true); }
+$('#btnOpenSetups').onclick=()=>{ $('#dlgSet').close(); openSetups(); };
+$('#suList').onclick=e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  if(b.dataset.use){ if(b.dataset.use!==SETUPS.active){ useSetup(b.dataset.use); toast(`Using ${activeSetup().name||activeSetup().label}`); } renderSetupList(); $('#dlgSetups').close(); }
+  else if(b.dataset.edit) openBuilder(SETUPS.list.find(x=>x.id===b.dataset.edit), false);
+  else if(b.dataset.dup) openBuilder(SETUPS.list.find(x=>x.id===b.dataset.dup), true);
+  else if(b.dataset.del){ const s=SETUPS.list.find(x=>x.id===b.dataset.del); if(!s) return;
+    const n=hitsOf(s); if(!confirm(`Delete "${s.name||s.label}"${n?` and its ${n} logged hit${n===1?'':'s'}`:''}?`)) return;
+    SETUPS.list=SETUPS.list.filter(x=>x!==s); try{ localStorage.removeItem(s.engKey); }catch(_){}
+    if(SETUPS.active===s.id) useSetup(BUILTIN.id); else saveSetups();
+    renderSetupList(); toast('Setup deleted'); }
+};
+$('#btnNewSetup').onclick=()=>openBuilder(null,false);
+
+/* ---------- Setup builder: caliber → weapon → barrel → ammo ---------- */
+let BLD={ editId:null, nameTouched:false };
+const bv=id=>parseFloat($(id).value);
+function opt(v,t,sel){ return `<option value="${v}"${sel?' selected':''}>${t}</option>`; }
+function setIcon(img,id){ if(!id){ img.hidden=true; return; } img.hidden=false; img.onerror=()=>{ img.hidden=true; }; img.src=icon(id); }
+function fillCalibers(keep){
+  const has=!!GD;
+  for(const id of ['#bCal','#bWeapon','#bBarrel','#bAmmo']) $(id).disabled=!has;
+  $('#bData').hidden = has && !gdBusy;
+  $('#bData').textContent = gdBusy ? 'Downloading weapons and ammo from tarkov.dev…' : "No game data yet. Download it to pick from lists, or open Ammo values and type the numbers.";
+  if(!has){ for(const id of ['#bCal','#bWeapon','#bBarrel','#bAmmo']) $(id).innerHTML=opt('','—'); recalcBuild(); return; }
+  const cals=[...new Set(GD.w.map(w=>w[3]))].sort((a,b)=>calLabel(a).localeCompare(calLabel(b),undefined,{numeric:true}));
+  const cur=keep&&keep.caliber || $('#bCal').value || 'Caliber762x51';
+  $('#bCal').innerHTML=cals.map(c=>opt(c,calLabel(c),c===cur)).join('');
+  fillWeapons(keep);
+}
+function fillWeapons(keep){
+  const cal=$('#bCal').value, list=GD.w.filter(w=>w[3]===cal);
+  const cur=keep&&keep.weaponId || (list.some(w=>w[0]===$('#bWeapon').value)?$('#bWeapon').value:list[0]&&list[0][0]);
+  $('#bWeapon').innerHTML=list.map(w=>opt(w[0], w[1]+variant(w[2]), w[0]===cur)).join('');
+  const ammo=Object.entries(GD.a).filter(([id,a])=>ammoCal(cal).includes(a[2]) && a[10]===1 && a[11]==='bullet').sort((x,y)=>y[1][8]-x[1][8]);
+  $('#bAmmo').innerHTML=ammo.map(([id,a])=>opt(id, `${a[0]}  (${a[8]} pen, ${a[3]} m/s)`, false)).join('');
+  onWeapon(keep);
+}
+function onWeapon(keep){
+  const w=gdWeapon($('#bWeapon').value); if(!w) return;
+  setIcon($('#bWIcon'), w[0]);
+  const bs=w[7].filter(id=>GD.b[id]).sort((x,y)=>GD.b[x][0].localeCompare(GD.b[y][0],undefined,{numeric:true}));
+  $('#bBarrel').innerHTML = bs.length ? bs.map(id=>opt(id, GD.b[id][0], keep ? id===keep.barrelId : false)).join('') : opt('','Integrated barrel',true);
+  $('#bBarrel').disabled = !bs.length;
+  if(!keep && bs.length){ // no preset info in the data: start on the middle barrel of the list
+    $('#bBarrel').selectedIndex = Math.floor((bs.length-1)/2); }
+  if(!keep) $('#bVelW').value=w[4];
+  const da=GD.a[w[6]];
+  if(da && !keep){ $('#bDefSpeed').value=da[3]; $('#bDefBC').value=da[4]; }
+  $('#bDefNote').textContent = da ? `The zero is set with the weapon's default ammo (${da[0]}), like the game does.` : "The zero is set with the weapon's default ammo.";
+  const want = keep&&keep.ammoId || (GD.a[w[6]]&&[...$('#bAmmo').options].some(o=>o.value===w[6]) ? w[6] : $('#bAmmo').value);
+  if(want) $('#bAmmo').value=want;
+  onBarrel(keep); onAmmo(keep);
+}
+function onBarrel(keep){
+  const w=gdWeapon($('#bWeapon').value), b=GD&&GD.b[$('#bBarrel').value];
+  setIcon($('#bBIcon'), b ? $('#bBarrel').value : null);
+  if(!keep){ $('#bVelB').value = b ? b[1] : 0; $('#bCrad').value = b ? b[2] : (w ? w[5] : 0); }
+  recalcBuild();
+}
+function onAmmo(keep){
+  const a=GD&&GD.a[$('#bAmmo').value]; setIcon($('#bAIcon'), a ? $('#bAmmo').value : null);
+  if(a && !keep){ $('#bSpeed').value=a[3]; $('#bBC').value=a[4]; $('#bDmg').value=a[7]; $('#bPen').value=a[8]; $('#bAmmoAcc').value=a[9]; }
+  autoName(); recalcBuild();
+}
+function autoName(){
+  if(BLD.nameTouched) return;
+  const w=gdWeapon($('#bWeapon').value), b=GD&&GD.b[$('#bBarrel').value], a=GD&&GD.a[$('#bAmmo').value];
+  if(w) $('#bName').value=[w[1]+variant(w[2]), b?b[0].replace(w[1],'').trim()||b[0]:null, a?a[0]:null].filter(Boolean).join(', ');
+}
+function buildParams(){
+  const velMult=(100+(bv('#bVelW')||0)+(bv('#bVelB')||0)+(bv('#bVelA')||0))/100;
+  return { speed:bv('#bSpeed'), bc:bv('#bBC'), damage:bv('#bDmg'), penetration:bv('#bPen'), defSpeed:bv('#bDefSpeed')||bv('#bSpeed'), defBC:bv('#bDefBC')||bv('#bBC'),
+    velMult, zero:+$('#bZero').value||50, hob:(bv('#bHob')||68.58)/1000, maxDist:Math.min(1500,Math.max(100,bv('#bMax')||650)), step:5,
+    cradBase:bv('#bCrad')||0, ammoAcc:bv('#bAmmoAcc')||0, addAcc:bv('#bAddAcc')||0 };
+}
+let bT=0;
+function recalcBuild(){ clearTimeout(bT); bT=setTimeout(()=>{
+  const p=buildParams(), ok=p.speed>0 && p.bc>0 && p.defSpeed>0 && p.defBC>0;
+  $('#bVelOut').innerHTML = `Multiplier <b>×${p.velMult.toFixed(3)}</b>${p.speed>0?`, muzzle velocity <b>${(p.speed*p.velMult).toFixed(1)} m/s</b>`:''}`;
+  const crad=p.cradBase*Ballistics.ammoAccFactor(p.ammoAcc)*((100-p.addAcc)/100);
+  $('#bAccOut').innerHTML = `<b>${(100*crad/2.909).toFixed(2)}</b> Tarkov MOA, <b>${(crad*100).toFixed(2)} cm</b> spread radius at 100 m`;
+  $('#bSave').disabled=!ok;
+  if(!ok){ $('#bPrev').innerHTML='<tr><td colspan="6" style="text-align:left;font:400 14px/1.4 var(--f-ui);color:var(--dust)">Pick a weapon and ammo, or fill in the ammo values.</td></tr>'; return; }
+  const t=Ballistics.table(p); BLD.last={p,t};
+  const show=[50,100,150,200,250,300,400,500,600,800,1000,1200,1500].filter(d=>d<=p.maxDist);
+  $('#bPrev').innerHTML=show.map(d=>{ const r=t.rows.find(x=>x[0]===d); if(!r) return '';
+    const hold=-r[4]/(d/100*2.909*(Number(state.fudge)||1));
+    return `<tr><td>${d}</td><td class="h1">${fmt(hold,1)}</td><td class="d1">${fmt(r[4],1)}</td><td>${r[3].toFixed(0)}</td><td>${r[2].toFixed(1)}</td><td>${r[1].toFixed(1)}</td></tr>`; }).join('');
+},60); }
+function openBuilder(setup, copy){
+  BLD={ editId: setup&&!copy ? setup.id : null, nameTouched: !!setup };
+  $('#bTitle').textContent = setup ? (copy?'Copy setup':'Edit setup') : 'New setup';
+  $('#bZero').innerHTML=CALIBRATIONS.map(c=>opt(c,c+' m',c===((setup&&setup.params&&setup.params.zero)||50))).join('');
+  const P=setup&&setup.params;
+  if(P){ for(const [id,k] of [['#bVelW','velW'],['#bVelB','velB'],['#bVelA','velA'],['#bSpeed','speed'],['#bBC','bc'],['#bDmg','damage'],['#bPen','penetration'],['#bDefSpeed','defSpeed'],['#bDefBC','defBC'],['#bCrad','cradBase'],['#bAmmoAcc','ammoAcc'],['#bAddAcc','addAcc'],['#bHob','hobMm'],['#bMax','maxDist']]) $(id).value=P[k]??'';
+    $('#bName').value = copy ? (setup.name+' (copy)') : setup.name; }
+  else { $('#bName').value=''; $('#bVelA').value=0; $('#bAddAcc').value=0; $('#bHob').value=68.58; $('#bMax').value=650; }
+  $('#dlgSetups').open && $('#dlgSetups').close();
+  openSheet($('#dlgBuild'));
+  fillCalibers(P ? {caliber:P.caliber, weaponId:P.weaponId, barrelId:P.barrelId, ammoId:P.ammoId} : null);
+  if(P) recalcBuild();
+  if(!GD && navigator.onLine) downloadGameData(true);
+}
+$('#bCal').onchange=()=>fillWeapons(null);
+$('#bWeapon').onchange=()=>onWeapon(null);
+$('#bBarrel').onchange=()=>{ onBarrel(null); autoName(); };
+$('#bAmmo').onchange=()=>onAmmo(null);
+$('#bName').oninput=()=>{ BLD.nameTouched=true; };
+for(const id of ['#bVelW','#bVelB','#bVelA','#bSpeed','#bBC','#bDmg','#bPen','#bDefSpeed','#bDefBC','#bCrad','#bAmmoAcc','#bAddAcc','#bZero','#bHob','#bMax']) $(id).addEventListener('input',recalcBuild);
+$('#bSave').onclick=()=>{
+  recalcBuild(); clearTimeout(bT);
+  const p=buildParams(); if(!(p.speed>0&&p.bc>0)) return;
+  const t=Ballistics.table(p), w=GD&&gdWeapon($('#bWeapon').value), b=GD&&GD.b[$('#bBarrel').value], a=GD&&GD.a[$('#bAmmo').value];
+  const id=BLD.editId || ('gen-'+Date.now().toString(36)), r=(x,d)=>Math.round(x*10**d)/10**d;
+  const name=$('#bName').value.trim() || (w?w[1]:'Custom setup');
+  const setup={ id, kind:'generated', name, label:name, engKey:'bv_eng::'+id, baseCal:p.zero, generated:new Date().toISOString(),
+    rows:t.rows.map(x=>[x[0],r(x[1],2),r(x[2],2),r(x[3],2),r(x[4],3),r(x[5],3),r(x[6],2)]),
+    meta:{ caliber: w?calLabel(w[3]):'', weapon: w?w[1]+variant(w[2]):name, barrel: b?b[0]:(w?'Integrated barrel':''), ammo: a?a[1]:'Custom ammo',
+           pen:String(p.penetration), dmg:String(p.damage), speed:(p.speed*p.velMult).toFixed(1)+' m/s', bc:String(p.bc), velMod:p.velMult.toFixed(3), moa:t.tarkovMOA.toFixed(2), hob:(p.hob*1000).toFixed(2)+' mm' },
+    params:{ caliber:$('#bCal').value||null, weaponId:w?w[0]:null, barrelId:b?$('#bBarrel').value:null, ammoId:a?$('#bAmmo').value:null,
+             velW:bv('#bVelW')||0, velB:bv('#bVelB')||0, velA:bv('#bVelA')||0, speed:p.speed, bc:p.bc, damage:p.damage, penetration:p.penetration,
+             defSpeed:p.defSpeed, defBC:p.defBC, cradBase:p.cradBase, ammoAcc:p.ammoAcc, addAcc:p.addAcc, zero:p.zero, hobMm:p.hob*1000, maxDist:p.maxDist, gameData:GD&&GD.v } };
+  const i=SETUPS.list.findIndex(x=>x.id===id);
+  if(i>=0) SETUPS.list[i]=setup; else SETUPS.list.push(setup);
+  saveSetups(); $('#dlgBuild').close(); useSetup(id);
+  toast(i>=0 ? 'Setup updated' : `Using ${name}`);
+};
+
 /* ---------- Import table ---------- */
 function parseTable(text){
   const out=[], seen=new Set();
@@ -1631,11 +2041,10 @@ $('#btnImport').onclick=()=>{ $('#impErr').hidden=true; openSheet($('#dlgImp'));
 $('#impOk').onclick=()=>{
   const rows=parseTable($('#impText').value);
   if(!rows){ const el=$('#impErr'); el.textContent='No table rows found. Each row needs the 10 columns of the drop table.'; el.hidden=false; return; }
-  const cal=+$('#impCal').value||50;
-  DS={ label:$('#impLabel').value.trim()||'Imported table', baseCal:cal, generated:null, meta:null, rows };
-  saveSet(DS); state.cal=cal; ENG=loadEng(); $('#dlgImp').close(); renderAll(); toast('Table imported');
+  const cal=+$('#impCal').value||50, id='imp-'+Date.now().toString(36), name=$('#impLabel').value.trim()||'Imported table';
+  SETUPS.list.push({ id, kind:'imported', name, label:name, engKey:'bv_eng::'+id, baseCal:cal, generated:new Date().toISOString(), meta:null, rows });
+  saveSetups(); $('#dlgImp').close(); useSetup(id); renderSetupList(); toast('Table imported');
 };
-$('#btnReset').onclick=()=>{ clearSaved(); DS=DEFAULT_SET; state.cal=DS.baseCal; ENG=loadEng(); renderAll(); toast('DVL-10 table restored'); };
 
 /* ---------- PWA: offline service worker, install, updates ---------- */
 const standalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
