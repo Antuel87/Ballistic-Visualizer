@@ -1,0 +1,1696 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Ballistic Visualizer</title>
+<meta name="description" content="Scope hold, DOPE card and hit calibration for Escape from Tarkov drop tables.">
+<meta name="theme-color" content="#191B16">
+<meta name="color-scheme" content="dark">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Ballistics">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* Olive-graphite field kit, flat-dark-earth accent. Orange = reticle hold, green = drop (same as the scope canvas). */
+  --ground:#191B16; --plate:#21241D; --plate-2:#2A2E25; --plate-3:#323729;
+  --line:#383D31; --line-2:#4B5143;
+  --bone:#E9E4D4; --dust:#A6A28F; --dust-2:#7E7B6C;
+  --fde:#CDA86F; --fde-ink:#22190A; --fde-soft:rgba(205,168,111,.14);
+  --hold:#FFB02E; --hold-dim:#BC8B3F; --drop:#7FD85E; --drop-dim:#6C9759;
+  --red:#E42028; --glass:rgb(20,26,34);
+  --f-ui:"Barlow",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --f-num:"Barlow Condensed","Roboto Condensed","Arial Narrow",system-ui,sans-serif;
+  --ease:cubic-bezier(.2,.8,.2,1);
+  --bar-h:56px; --rail-w:116px;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--ground);color:var(--bone)}
+body{font:400 15px/1.45 var(--f-ui);-webkit-font-smoothing:antialiased;min-height:100dvh}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--fde);outline-offset:2px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.num{font-family:var(--f-num);font-variant-numeric:tabular-nums}
+
+/* ---------- Top bar ---------- */
+.bar{height:var(--bar-h);display:flex;align-items:center;gap:14px;padding:0 16px;border-bottom:1px solid var(--line);background:var(--ground);position:relative;z-index:5}
+.brand{display:flex;align-items:center;gap:10px;font:600 17px/1 var(--f-ui);letter-spacing:.01em;white-space:nowrap}
+.brand svg{width:26px;height:26px;color:var(--fde)}
+.setup{display:flex;align-items:center;gap:0;margin-left:6px;border:1px solid var(--line);border-radius:999px;background:var(--plate);padding:3px;cursor:pointer;min-width:0}
+.setup span{font:600 14px/1 var(--f-num);letter-spacing:.02em;padding:7px 10px;color:var(--bone);white-space:nowrap}
+.setup span+span{border-left:1px solid var(--line);color:var(--dust)}
+.setup:hover{border-color:var(--line-2)}
+.bar-actions{margin-left:auto;display:flex;align-items:center;gap:8px}
+.btn{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 14px;border-radius:8px;border:1px solid var(--line);background:var(--plate);cursor:pointer;font-weight:500;font-size:14px;white-space:nowrap;transition:background .15s,border-color .15s}
+.btn:hover{background:var(--plate-2);border-color:var(--line-2)}
+.btn.primary{background:var(--fde);border-color:var(--fde);color:var(--fde-ink);font-weight:600}
+.btn.primary:hover{filter:brightness(1.07)}
+.btn.quiet{background:transparent;border-color:transparent;color:var(--dust)}
+.btn.quiet:hover{color:var(--bone);background:var(--plate)}
+.btn svg{width:17px;height:17px}
+.count{min-width:20px;height:20px;border-radius:10px;background:var(--fde);color:var(--fde-ink);font:700 13px/20px var(--f-num);text-align:center;padding:0 6px}
+.count:empty{display:none}
+
+/* Switch */
+.switch{display:inline-flex;align-items:center;gap:10px;cursor:pointer;user-select:none;font-size:14px}
+.switch input{appearance:none;flex:0 0 auto;width:38px;height:22px;border-radius:11px;background:var(--line-2);position:relative;margin:0;cursor:pointer;transition:background .2s}
+.switch input::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:var(--bone);transition:transform .2s var(--ease)}
+.switch input:checked{background:var(--fde)}
+.switch input:checked::after{transform:translateX(16px);background:var(--fde-ink)}
+.switch input:disabled{opacity:.4;cursor:not-allowed}
+.switch:has(input:disabled){color:var(--dust-2);cursor:not-allowed}
+
+/* ---------- Station (main app area) ---------- */
+.station{display:grid;grid-template-columns:minmax(0,1fr) clamp(350px,31vw,450px);height:calc(100dvh - var(--bar-h));background:var(--ground)}
+.station:fullscreen{height:100vh;width:100vw}
+.fsbar{display:none}
+.station:fullscreen,.station.fs{grid-template-rows:auto minmax(0,1fr)}
+.station:fullscreen .fsbar,.station.fs .fsbar{display:flex;grid-column:1/-1;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--ground);min-width:0}
+.fs-setup{display:flex;gap:6px 22px;margin:0;min-width:0;flex-wrap:wrap}
+.fs-setup div{display:flex;align-items:baseline;gap:7px;min-width:0}
+.fs-setup dt{font-size:13px;color:var(--dust)}
+.fs-setup dd{margin:0;font:600 19px/1.1 var(--f-num);color:var(--bone);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fsbar .btn{margin-left:auto;flex:none}
+.station.fs{position:fixed;inset:0;z-index:60;height:100dvh}
+.scope{display:flex;gap:12px;padding:16px;min-height:0;min-width:0}
+.lens{position:relative;flex:1;min-width:0;min-height:0;border-radius:18px;overflow:hidden;background:var(--glass);box-shadow:0 0 0 1px #000,0 0 0 2px var(--line)}
+.lens canvas{display:block;width:100%;height:100%;object-fit:contain}
+.lens::after{content:"";position:absolute;inset:0;pointer-events:none;border-radius:inherit;
+  background:radial-gradient(120% 95% at 50% 50%,transparent 62%,rgba(0,0,0,.38) 100%)}
+.booting .lens canvas{animation:iris 1.05s cubic-bezier(.16,.8,.2,1) both}
+@keyframes iris{from{clip-path:circle(0% at 50% 50%)}to{clip-path:circle(85% at 50% 50%)}}
+
+/* Floating scope tools */
+.tools{position:absolute;left:12px;bottom:12px;z-index:2;display:flex;align-items:center;gap:4px;padding:4px;border-radius:12px;
+  background:rgba(25,27,22,.72);backdrop-filter:blur(10px) saturate(1.2);-webkit-backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.08)}
+.tools button{width:34px;height:34px;border-radius:8px;border:0;background:transparent;cursor:pointer;display:grid;place-items:center;color:var(--bone)}
+.tools button:hover{background:rgba(255,255,255,.08)}
+.tools button svg{width:18px;height:18px}
+.tools .zoomval{min-width:52px;text-align:center;font:600 16px/1 var(--f-num);color:var(--bone)}
+.tools .sep{width:1px;height:22px;background:rgba(255,255,255,.12);margin:0 2px}
+.tools button[aria-pressed="true"]{color:var(--hold)}
+
+/* Range rail */
+.rail{flex:0 0 var(--rail-w);position:relative;border-radius:18px;background:var(--plate);border:1px solid var(--line);touch-action:none;cursor:ns-resize;user-select:none}
+.rail:focus-visible{outline-offset:-2px}
+.track{position:absolute;top:34px;bottom:34px;left:0;right:0}
+.track::before{content:"";position:absolute;left:30px;top:0;bottom:0;width:3px;border-radius:2px;background:var(--line-2)}
+.fill{position:absolute;left:30px;top:0;width:3px;border-radius:2px;background:var(--fde)}
+.ticks{position:absolute;inset:0;pointer-events:none}
+.tick{position:absolute;left:24px;width:15px;height:1px;background:var(--dust-2)}
+.tick.minor{left:27px;width:9px;background:var(--line-2)}
+.tick span{position:absolute;left:22px;top:-8px;font:500 13px/1 var(--f-num);color:var(--dust)}
+.tick.zero{left:20px;width:23px;height:2px;background:var(--red)}
+.shotdot{position:absolute;left:12px;width:7px;height:7px;margin-top:-3.5px;border-radius:50%;background:var(--hold);box-shadow:0 0 0 2px var(--plate)}
+.shotdot.off{background:var(--dust-2)}
+.thumb{position:absolute;left:6px;right:6px;height:48px;margin-top:-24px;border-radius:12px;background:var(--fde);color:var(--fde-ink);
+  display:flex;align-items:baseline;justify-content:center;gap:3px;padding-top:7px;box-shadow:0 6px 18px rgba(0,0,0,.45);
+  transition:top .18s var(--ease),transform .15s var(--ease)}
+.thumb b{font:700 36px/1 var(--f-num);letter-spacing:-.01em}
+.thumb i{font:600 16px/1 var(--f-num);font-style:normal;opacity:.75}
+.rail.drag .thumb{transition:none;transform:scale(1.04)}
+
+/* Readout column */
+.readout{display:flex;flex-direction:column;min-height:0;border-left:1px solid var(--line);background:var(--plate);container-type:inline-size;container-name:ro}
+.lead{padding:16px 22px 16px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px 18px;border-bottom:1px solid var(--line)}
+.lead .holdsub,.lead .stats{grid-column:1/-1}
+.metric .k{min-height:34px}
+.metric .k{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--dust)}
+.metric .v{display:flex;align-items:baseline;gap:8px;margin-top:2px}
+.metric output{font-family:var(--f-num);font-variant-numeric:tabular-nums;font-weight:700;line-height:.86;letter-spacing:-.015em}
+.metric .u{font:600 20px/1 var(--f-num);color:var(--dust)}
+.range output{font-size:clamp(48px,17cqi,88px);color:var(--bone)}
+.hold output{font-size:clamp(48px,17cqi,88px);color:var(--hold)}
+.metric .u{font-size:clamp(15px,4.2cqi,20px)}
+.metric .v{flex-wrap:wrap;row-gap:2px}
+.metric{min-width:0}
+.hold{padding-left:18px;border-left:1px solid var(--line)}
+.steps{display:flex;gap:4px;margin-left:auto}
+.steps button{height:32px;min-width:46px;padding:0 8px;border-radius:9px;border:1px solid var(--line);background:var(--plate-2);cursor:pointer;font:600 16px/1 var(--f-num);color:var(--bone)}
+.steps button:hover{border-color:var(--line-2);background:var(--plate-3)}
+.tag{font:600 12px/1 var(--f-ui);padding:4px 8px;border-radius:999px;background:var(--plate-3);color:var(--dust)}
+.tag.on{background:rgba(255,176,46,.15);color:var(--hold)}
+.holdsub{font-size:14px;color:var(--dust);margin-top:-2px}
+.holdsub b{font:600 16px/1 var(--f-num);color:var(--bone)}
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.stats div{padding:9px 10px;border-left:1px solid var(--line)}
+.stats div:first-child{border-left:0}
+.stats dt{font-size:12px;color:var(--dust);white-space:nowrap}
+.stats dd{margin:2px 0 0;font:600 clamp(15px,4.4cqi,19px)/1.1 var(--f-num);font-variant-numeric:tabular-nums;white-space:nowrap}
+.stats .g{color:var(--drop)}
+
+/* Step selector (top bar, and in the readout on narrow screens) */
+.stepseg{display:flex;align-items:center;gap:2px;padding:3px;border:1px solid var(--line);border-radius:999px;background:var(--plate);white-space:nowrap}
+.stepseg .k{font-size:13px;color:var(--dust);padding:0 6px 0 9px}
+.stepseg .k.u{padding:0 9px 0 4px}
+.stepseg button{height:28px;min-width:36px;padding:0 8px;border:0;border-radius:999px;background:transparent;cursor:pointer;font:600 15px/1 var(--f-num);color:var(--dust);transition:background .18s,color .18s}
+.stepseg button:hover{color:var(--bone)}
+.stepseg button[aria-pressed="true"]{background:var(--fde);color:var(--fde-ink)}
+.stepseg.ro{display:none;grid-column:1/-1;justify-self:start}
+
+/* Hit logger: two knurled metal dials */
+/* Collapsible panels (Log a hit, DOPE card) */
+.panel{border-bottom:1px solid var(--line)}
+.panel-head{width:100%;display:flex;align-items:center;gap:10px;padding:14px 22px;min-height:52px;background:transparent;border:0;cursor:pointer;text-align:left;color:var(--bone)}
+.panel-head:hover{background:rgba(255,255,255,.025)}
+.panel-head .pt{font:600 16px/1 var(--f-ui);white-space:nowrap}
+.panel-head .pi{width:18px;height:18px;color:var(--fde);flex:none}
+.panel-head .hint{margin-left:auto;text-align:right}
+.panel-head .hint b{font:600 15px/1 var(--f-num);color:var(--bone)}
+.chev{width:18px;height:18px;color:var(--dust);flex:none;transition:transform .32s var(--ease)}
+[aria-expanded="true"] > .chev{transform:rotate(180deg)}
+.panel-body,.collapse{display:grid;grid-template-rows:0fr;transition:grid-template-rows .34s var(--ease)}
+.panel.open>.panel-body,.collapse.open{grid-template-rows:1fr}
+.panel-body>.inner,.collapse>.inner{min-height:0;overflow:hidden}
+.panel:not(.open)>.panel-body>.inner,.collapse:not(.open)>.inner{visibility:hidden;transition:visibility 0s .34s}
+.pnl-log .pad{padding:0 22px 16px;display:grid;gap:12px}
+.pnl-dope.open{flex:1;display:flex;flex-direction:column;min-height:300px;border-bottom:0}
+@media (min-width:1001px){ .readout{overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--line-2) transparent} .pv{height:150px} }
+.pnl-dope.open>.panel-body{flex:1;min-height:0}
+.pnl-dope .inner{display:flex;flex-direction:column}
+/* Live preview of the hit being logged */
+.pv{position:relative;height:180px;border-radius:12px;overflow:hidden;background:var(--glass);box-shadow:0 0 0 1px #000,0 0 0 2px var(--line)}
+.pv canvas{display:block;width:100%;height:100%;object-fit:contain}
+.pv-legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px;color:var(--dust)}
+.pv-legend b{font:600 15px/1 var(--f-num);color:var(--bone);margin-left:2px}
+.pv-legend i{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:6px;vertical-align:-1px}
+.pv-legend .la{background:transparent;box-shadow:inset 0 0 0 2px #38D6FF}
+.pv-legend .lb{background:#FF5CA8}
+.pv-legend .lh{background:var(--hold);border-radius:2px;transform:rotate(45deg) scale(.8)}
+.pv-legend .lt{width:16px;height:0;border-radius:0;border-top:2px dashed var(--drop-dim);vertical-align:3px}
+.pv-legend .lc{width:16px;height:3px;border-radius:2px;background:var(--drop);vertical-align:3px}
+.pv-legend .lband{width:16px;height:10px;border-radius:3px;background:rgba(233,228,212,.12)}
+.pnl-chart .pad{padding:0 22px 16px;display:grid;gap:10px}
+.dchart{height:200px;border-radius:12px;background:var(--ground);border:1px solid var(--line);overflow:hidden;cursor:crosshair;touch-action:pan-y}
+.dchart svg{display:block;width:100%;height:100%}
+/* HUD shown over the scope in phone full screen */
+.hud{display:none;position:absolute;top:10px;left:10px;right:10px;z-index:2;gap:8px;justify-content:space-between;pointer-events:none}
+.hud>div{display:grid;grid-template-columns:auto auto;align-items:baseline;column-gap:5px;padding:6px 12px 8px;min-width:0;border-radius:12px;background:rgba(25,27,22,.74);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.08)}
+.hud .hk{grid-column:1/-1;font-size:12px;line-height:1.2;color:var(--dust)}
+.hud b{font:700 clamp(26px,8vw,38px)/1 var(--f-num);font-variant-numeric:tabular-nums;color:var(--bone)}
+.hud b.h{color:var(--hold)}
+.hud i{font:600 14px/1 var(--f-num);font-style:normal;color:var(--dust)}
+.dials{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 86px;gap:12px;align-items:end}
+.dial{display:grid;gap:7px;min-width:0;border-radius:12px}
+.dial:focus{outline:none}
+.dial-top{display:flex;align-items:baseline;gap:6px;min-width:0}
+.dial-k{font-size:13px;color:var(--dust);white-space:nowrap}
+.dial-top output{margin-left:auto;font:700 clamp(24px,8cqi,32px)/1 var(--f-num);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.dial-top .u{font:600 14px/1 var(--f-num);color:var(--dust)}
+.dial.dist output{color:var(--bone)} .dial.mark output{color:var(--hold)}
+.wheel{position:relative;height:78px;border-radius:12px;background:#0c0d0c;cursor:ns-resize;touch-action:none;user-select:none;
+  box-shadow:inset 0 0 0 1px #000,0 0 0 1px rgba(255,255,255,.05),0 10px 22px rgba(0,0,0,.4)}
+.wheel canvas{display:block;width:100%;height:100%;border-radius:inherit}
+.wheel::before,.wheel::after{content:"";position:absolute;top:50%;margin-top:-6px;border:6px solid transparent;pointer-events:none;filter:drop-shadow(0 1px 1px rgba(0,0,0,.6))}
+.wheel::before{left:-2px;border-left:7px solid var(--fde)}
+.wheel::after{right:-2px;border-right:7px solid var(--fde)}
+.dial:focus-visible .wheel{box-shadow:0 0 0 2px var(--fde),0 10px 22px rgba(0,0,0,.4)}
+.dial.turning .wheel{cursor:grabbing}
+.dial-cap{font-size:12px;color:var(--dust-2);text-align:center}
+.logbtn{height:78px;border-radius:12px;flex-direction:column;justify-content:center;gap:5px;font-size:15px;padding:0 8px;position:relative;overflow:hidden}
+.logbtn svg{width:22px;height:22px}
+.logbtn .idle{display:contents} .logbtn .done{display:none}
+.logbtn.ok{background:var(--bone);border-color:var(--bone);animation:thunk .45s var(--ease)}
+.logbtn.ok .idle{display:none} .logbtn.ok .done{display:contents}
+@keyframes thunk{0%{transform:scale(1)}25%{transform:scale(.92)}60%{transform:scale(1.04)}100%{transform:scale(1)}}
+.dial.kick .wheel{animation:kick .5s var(--ease)}
+@keyframes kick{0%{transform:translateY(0)}30%{transform:translateY(2px)}100%{transform:translateY(0)}}
+/* Hit feedback on the scope */
+.ping{position:absolute;left:50%;top:50%;width:18px;height:18px;margin:-9px 0 0 -9px;border-radius:50%;border:2px solid var(--hold);pointer-events:none;z-index:3;animation:ping .8s cubic-bezier(.2,.7,.2,1) forwards}
+.ping.b{animation-delay:.12s;border-color:rgba(255,176,46,.6)}
+@keyframes ping{from{transform:scale(.3);opacity:1}to{transform:scale(8);opacity:0}}
+.shotdot.new{animation:pop .6s var(--ease)}
+@keyframes pop{0%{transform:scale(0)}55%{transform:scale(2.2)}100%{transform:scale(1)}}
+.hint{font-size:13px;color:var(--dust-2)}
+
+/* DOPE card */
+.tablebox{flex:1;min-height:0;overflow:auto;padding:0 10px 14px;scrollbar-width:thin;scrollbar-color:var(--line-2) transparent}
+table{width:100%;border-collapse:separate;border-spacing:0;font-variant-numeric:tabular-nums}
+thead th{position:sticky;background:var(--plate);z-index:2;font:500 13px/1.15 var(--f-ui);color:var(--dust);text-align:right;padding:6px clamp(5px,2cqi,10px);vertical-align:bottom}
+thead th{top:0;padding-top:6px;padding-bottom:9px;border-bottom:1px solid var(--line)}
+thead th.ch{color:var(--hold-dim)} thead th.ch.c{color:var(--hold)}
+thead th.cd{color:var(--drop-dim)} thead th.cd.c{color:var(--drop)}
+thead th.c{font-weight:600}
+th:first-child,td:first-child{text-align:left}
+tbody td{padding:7px clamp(5px,2cqi,10px);text-align:right;font:500 clamp(16px,4.3cqi,18px)/1.15 var(--f-num);border-bottom:1px solid rgba(56,61,49,.55);white-space:nowrap}
+tbody td:first-child{font-weight:700;color:var(--bone)}
+tbody td.h0{color:var(--hold-dim)} tbody td.h1{color:var(--hold);font-weight:700}
+tbody td.d0{color:var(--drop-dim)} tbody td.d1{color:var(--drop);font-weight:600}
+tbody td.na{color:var(--dust-2)}
+tbody tr{cursor:pointer;transition:background .18s}
+tbody tr:hover{background:rgba(255,255,255,.035)}
+tbody tr.sel{background:var(--fde-soft)}
+tbody tr.extra td:first-child::after{content:"";display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--fde);margin-left:6px;vertical-align:4px}
+tbody tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--fde)}
+tbody tr:first-child td{padding-top:9px}
+.dope-foot{padding:0 22px 14px;display:flex;gap:8px;align-items:center}
+.dope-foot .hint{margin-right:auto}
+
+/* ---------- Sheets ---------- */
+dialog.sheet{position:fixed;inset:0 0 0 auto;margin:0;height:100dvh;max-height:none;width:min(580px,100vw);max-width:none;padding:0;border:0;border-left:1px solid var(--line);
+  background:var(--plate);color:var(--bone);display:flex;flex-direction:column;
+  transform:translateX(0);transition:transform .32s var(--ease),overlay .32s allow-discrete,display .32s allow-discrete}
+dialog.sheet:not([open]){display:none;transform:translateX(100%)}
+@starting-style{dialog.sheet[open]{transform:translateX(100%)}}
+dialog::backdrop{background:rgba(8,9,7,.55);backdrop-filter:blur(3px);opacity:1;transition:opacity .32s,overlay .32s allow-discrete,display .32s allow-discrete}
+dialog:not([open])::backdrop{opacity:0}
+@starting-style{dialog[open]::backdrop{opacity:0}}
+.sheet-head{display:flex;align-items:center;gap:10px;padding:18px 22px;border-bottom:1px solid var(--line)}
+.sheet-head h2{margin:0;font:600 20px/1.1 var(--f-ui)}
+.sheet-head .btn{margin-left:auto}
+.sheet-body{flex:1;overflow:auto;padding:6px 22px 28px;scrollbar-width:thin;scrollbar-color:var(--line-2) transparent}
+.sec{padding:18px 0;border-bottom:1px solid var(--line)}
+.sec:last-child{border-bottom:0}
+.sec h3{margin:0 0 4px;font:600 16px/1.2 var(--f-ui)}
+.sec > p{margin:0 0 12px;font-size:14px;color:var(--dust);max-width:62ch}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px 14px}
+.fld{display:grid;gap:6px;font-size:14px;color:var(--dust)}
+.fld input,.fld select,.fld textarea{height:40px;border-radius:9px;border:1px solid var(--line);background:var(--ground);padding:0 12px;color:var(--bone);font-size:15px;width:100%}
+.fld textarea{height:auto;min-height:90px;padding:10px 12px;font:500 15px/1.4 var(--f-num)}
+.fld input:focus,.fld select:focus,.fld textarea:focus{outline:none;border-color:var(--fde);box-shadow:0 0 0 3px var(--fde-soft)}
+.fld.n input{font:600 18px/1 var(--f-num);font-variant-numeric:tabular-nums}
+.stack{display:grid;gap:12px;margin-top:12px}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{height:38px;min-width:48px;padding:0 12px;border-radius:9px;border:1px solid var(--line);background:var(--ground);cursor:pointer;font:600 16px/1 var(--f-num)}
+.chips button[aria-pressed="true"]{background:var(--fde);border-color:var(--fde);color:var(--fde-ink)}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;margin:0;font-size:14px}
+.kv dt{color:var(--dust)} .kv dd{margin:0;text-align:right;font:600 16px/1.2 var(--f-num)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.keys{display:grid;grid-template-columns:auto 1fr;gap:8px 14px;font-size:14px;color:var(--dust);margin:0}
+kbd{font:600 13px/1 var(--f-num);padding:4px 7px;border-radius:6px;border:1px solid var(--line-2);border-bottom-width:2px;color:var(--bone);background:var(--ground)}
+
+/* Calibration sheet */
+.fit{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-top:14px}
+.fit > div{padding:12px 14px;border-left:1px solid var(--line)}
+.fit > div:first-child{border-left:0}
+.fit dt{font-size:13px;color:var(--dust)}
+.fit dd{margin:3px 0 0;font:700 28px/1 var(--f-num);font-variant-numeric:tabular-nums}
+.fit small{display:block;margin-top:5px;font-size:13px;color:var(--dust);line-height:1.3}
+.fit .a{color:var(--hold)}
+.note{margin-top:12px;padding:12px 14px;border-radius:12px;background:var(--ground);border:1px solid var(--line);font-size:14px;color:var(--dust)}
+.note.warn{border-color:#6b4b1f;color:#F1C27D}
+.addshot{display:grid;grid-template-columns:110px 110px minmax(0,1fr);gap:10px;align-items:end}
+.addshot .btn{height:40px}
+details{margin-top:12px}
+summary{cursor:pointer;color:var(--dust);font-size:14px}
+summary:hover{color:var(--bone)}
+.shots td{font-size:17px}
+.shots tbody tr{cursor:default}
+.shots tr.off td{opacity:.4}
+.shots .pos{color:#9BE07E} .shots .neg{color:#FF9E8A}
+.x{width:30px;height:30px;border-radius:8px;border:0;background:transparent;color:var(--dust);cursor:pointer}
+.x:hover{background:rgba(255,120,100,.12);color:#FF9E8A}
+.shots input[type=checkbox]{width:18px;height:18px;accent-color:var(--fde)}
+.chart{margin-top:14px;border:1px solid var(--line);border-radius:14px;background:var(--ground);padding:8px 6px 4px}
+.chart svg{display:block;width:100%;height:auto}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--dust);padding:2px 10px 6px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:-1px}
+
+/* Import dialog */
+dialog.modal{width:min(640px,calc(100vw - 32px));border:1px solid var(--line);border-radius:16px;background:var(--plate);color:var(--bone);padding:0;
+  opacity:1;transform:none;transition:opacity .22s,transform .22s var(--ease),overlay .22s allow-discrete,display .22s allow-discrete}
+dialog.modal:not([open]){opacity:0;transform:translateY(8px) scale(.98)}
+@starting-style{dialog.modal[open]{opacity:0;transform:translateY(8px) scale(.98)}}
+.modal .sheet-body{padding:16px 22px 22px}
+
+/* Toast */
+.toast{position:fixed;left:50%;bottom:24px;z-index:100;transform:translate(-50%,20px);opacity:0;pointer-events:none;
+  padding:11px 16px;border-radius:12px;background:var(--bone);color:var(--ground);font-weight:600;font-size:14px;box-shadow:0 10px 30px rgba(0,0,0,.45);
+  transition:opacity .2s,transform .25s var(--ease)}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+
+/* Update banner (new version of the app) */
+.updbar{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:110;display:flex;align-items:center;gap:10px;
+  padding:8px 8px 8px 16px;border-radius:14px;background:var(--plate-3);border:1px solid var(--line-2);box-shadow:0 12px 30px rgba(0,0,0,.5);font-size:14px;white-space:nowrap}
+.updbar[hidden]{display:none}
+.updbar .btn{height:34px}
+/* Installed app: keep the bar clear of the status bar / notch */
+@media (display-mode: standalone){ .bar{padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env(safe-area-inset-right))} }
+
+/* ---------- Responsive ---------- */
+@media (min-width:1001px) and (max-height:860px){
+  .readout{overflow:auto;scrollbar-width:thin;scrollbar-color:var(--line-2) transparent}
+  .pnl-dope.open{flex:none} .pnl-dope.open>.panel-body{flex:none} .tablebox{overflow:visible;flex:none}
+  .dope-foot{position:sticky;bottom:0;background:var(--plate);padding-top:10px;border-top:1px solid var(--line)}
+}
+@media (max-width:1000px){
+  .bar{gap:10px;padding:0 12px}
+  .brand span{display:none}
+  .setup span:nth-child(2){display:none}
+  .btn .lbl{display:none}
+  .bar-actions{gap:6px}
+  .stepseg.bar{display:none}
+  .stepseg.ro{display:flex}
+  .station{grid-template-columns:1fr;height:auto}
+  .station:fullscreen,.station.fs{display:flex;flex-direction:column;height:100dvh;overflow:hidden;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+  .scope{height:min(68dvh,620px);padding:12px 12px 0}
+  .station:fullscreen .scope,.station.fs .scope{flex:1;height:auto;min-height:0;padding:8px}
+  .station:fullscreen .fsbar,.station.fs .fsbar{padding:8px 12px;gap:8px}
+  .fs-setup{gap:2px 14px} .fs-setup dt{font-size:11px} .fs-setup dd{font-size:16px}
+  .station:fullscreen .readout,.station.fs .readout{display:none}
+  .station:fullscreen .hud,.station.fs .hud{display:flex}
+  .station:fullscreen .rail,.station.fs .rail{border-radius:14px}
+  .readout{border-left:0;border-top:1px solid var(--line);margin-top:12px}
+  .tablebox{max-height:none;overflow:visible}
+  .pv{height:200px}
+  :root{--rail-w:88px}
+  .thumb{height:40px;margin-top:-20px;padding-top:6px}
+  .thumb b{font-size:26px} .thumb i{font-size:13px}
+  .track::before,.fill{left:22px} .tick{left:17px;width:12px} .tick.minor{left:19px;width:8px} .tick span{left:17px;font-size:12px}
+  .tick.zero{left:14px;width:19px} .shotdot{left:7px}
+  dialog.sheet{inset:auto 0 0 0;width:100vw;height:auto;max-height:90dvh;border-left:0;border-top:1px solid var(--line);border-radius:18px 18px 0 0;transform:translateY(0)}
+  dialog.sheet:not([open]){transform:translateY(100%)}
+  @starting-style{dialog.sheet[open]{transform:translateY(100%)}}
+}
+@media (max-width:520px){
+  .switch .lbl{display:none}
+  .lead{padding:14px 16px 12px;gap:10px 14px} .hold{padding-left:14px} .pnl-log .pad,.pnl-chart .pad{padding:0 16px 14px} .panel-head{padding:12px 16px} .dials{gap:10px;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 72px} .dope-foot{padding:0 16px 14px}
+  .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .stats div:nth-child(3){border-left:0}
+  .stats div:nth-child(n+3){border-top:1px solid var(--line)}
+  .fit{grid-template-columns:1fr}
+  .fit > div{border-left:0;border-top:1px solid var(--line)} .fit > div:first-child{border-top:0}
+  .addshot{grid-template-columns:1fr 1fr}
+  .addshot .fld:nth-child(3){grid-column:1/-1}
+  tbody td{font-size:16px;padding:7px 6px} thead th{padding-left:6px;padding-right:6px}
+  .sheet-body{padding:4px 16px 24px} .sheet-head{padding:14px 16px}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important}
+}
+</style>
+</head>
+<body class="booting">
+
+<header class="bar">
+  <div class="brand">
+    <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="16" cy="16" r="11"/><path d="M16 2v8M16 22v8M2 16h8M22 16h8"/><circle cx="16" cy="16" r="1.6" fill="currentColor" stroke="none"/></svg>
+    <span>Ballistic Visualizer</span>
+  </div>
+  <button class="setup" id="btnSetup" title="Table and weapon setup"><span id="suWeapon">—</span><span id="suBarrel"></span><span id="suAmmo"></span></button>
+  <div class="bar-actions">
+    <div class="stepseg bar" role="group" aria-label="Scroll step"><span class="k">Step</span><button type="button" data-step="5">5</button><button type="button" data-step="10">10</button><button type="button" data-step="25">25</button><button type="button" data-step="50">50</button><button type="button" data-step="100">100</button><span class="k u">m</span></div>
+    <label class="switch" id="calibWrap" title="Aim with the drop corrected by your logged hits (C)"><input type="checkbox" id="vCorr" aria-label="Calibrated"><span class="lbl">Calibrated</span></label>
+    <button class="btn" id="btnCal" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg><span class="lbl">Calibration</span><span class="count" id="shotCount"></span></button>
+    <button class="btn primary" id="btnInstall" type="button" hidden title="Install as an app"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg><span class="lbl">Install</span></button>
+    <button class="btn" id="btnSet" type="button" aria-label="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg><span class="lbl">Settings</span></button>
+  </div>
+</header>
+
+<main class="station" id="station">
+  <div class="fsbar">
+    <dl class="fs-setup">
+      <div><dt>Weapon</dt><dd id="fsW">—</dd></div>
+      <div><dt>Barrel</dt><dd id="fsB">—</dd></div>
+      <div><dt>Ammo</dt><dd id="fsA">—</dd></div>
+    </dl>
+    <button class="btn quiet" id="fsExit" type="button" aria-label="Exit full screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg><span class="lbl">Exit full screen</span></button>
+  </div>
+  <section class="scope" aria-label="Scope view">
+    <div class="lens">
+      <canvas id="viz" width="575" height="550" aria-label="Scope view of the target at the selected range"></canvas>
+      <div class="hud" aria-hidden="true">
+        <div><span class="hk">Range</span><b id="hudDist">340</b><i>m</i></div>
+        <div><span class="hk" id="hudTag">Table</span><b class="h" id="hudHold">2.2</b><i>marks</i></div>
+      </div>
+      <div class="tools" role="toolbar" aria-label="Scope">
+        <button id="zOut" title="Zoom out" aria-label="Zoom out"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/></svg></button>
+        <span class="zoomval num" id="zVal">3.1×</span>
+        <button id="zIn" title="Zoom in" aria-label="Zoom in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5v14"/></svg></button>
+        <span class="sep"></span>
+        <button id="tHold" title="Hold indicator on the scope" aria-label="Hold indicator" aria-pressed="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 4v16M5 4h6M5 20h6M8 8h3M8 12h3M8 16h3"/></svg></button>
+        <button id="btnFs" title="Full screen (F)" aria-label="Full screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+      </div>
+    </div>
+    <div class="rail" id="rail" tabindex="0" role="slider" aria-label="Range" aria-valuemin="0">
+      <div class="track" id="track">
+        <div class="fill" id="fill"></div>
+        <div class="ticks" id="ticks"></div>
+        <div class="thumb" id="thumb"><b id="thumbV">340</b><i>m</i></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="readout" aria-label="Hold for the selected range">
+    <div class="lead">
+      <div class="metric range">
+        <div class="k">Range <span class="steps"><button id="vMinus" type="button" title="Closer (↑)">−25</button><button id="vPlus" type="button" title="Farther (↓)">+25</button></span></div>
+        <div class="v"><output id="roDist" class="num">340</output><span class="u">m</span></div>
+      </div>
+      <div class="metric hold">
+        <div class="k">Hold <span class="tag" id="holdTag">Table</span></div>
+        <div class="v"><output id="roHold" class="num">2.2</output><span class="u">marks</span></div>
+      </div>
+      <div class="holdsub" id="holdSub"></div>
+      <div class="stepseg ro" role="group" aria-label="Scroll step"><span class="k">Step</span><button type="button" data-step="5">5</button><button type="button" data-step="10">10</button><button type="button" data-step="25">25</button><button type="button" data-step="50">50</button><button type="button" data-step="100">100</button><span class="k u">m</span></div>
+      <dl class="stats">
+        <div><dt>Drop</dt><dd class="g" id="stDrop">—</dd></div>
+        <div><dt>Real MOA</dt><dd id="stMoa">—</dd></div>
+        <div><dt>Heads</dt><dd id="stHeads">—</dd></div>
+        <div><dt>Spread</dt><dd id="stDisp">—</dd></div>
+      </dl>
+    </div>
+
+    <section class="panel pnl-log" id="pLog">
+      <button class="panel-head" id="hLog" type="button" aria-expanded="false" aria-controls="pLogBody">
+        <svg class="pi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5" fill="currentColor"/></svg>
+        <span class="pt">Log a hit</span><span class="hint" id="logHint"></span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <div class="panel-body" id="pLogBody" role="region" aria-labelledby="hLog"><div class="inner"><div class="pad">
+      <div class="dials">
+        <div class="dial dist" id="dDist" tabindex="0" role="spinbutton" aria-label="Hit range" title="Drag, scroll or use the arrow keys. 5 m per click">
+          <div class="dial-top"><span class="dial-k">Range</span><output class="num">340</output><span class="u">m</span></div>
+          <div class="wheel"><canvas></canvas></div>
+          <div class="dial-cap">5 m per click</div>
+        </div>
+        <div class="dial mark" id="dMark" tabindex="0" role="spinbutton" aria-label="Mark held" title="Drag, scroll or use the arrow keys. 0.1 mark per click">
+          <div class="dial-top"><span class="dial-k">Held</span><output class="num">2.2</output><span class="u">marks</span></div>
+          <div class="wheel"><canvas></canvas></div>
+          <div class="dial-cap">0.1 mark per click</div>
+        </div>
+        <div style="display:grid;gap:7px">
+          <button class="btn primary logbtn" id="btnLog" type="button" title="Log this hit (Enter on a dial)">
+            <span class="idle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5" fill="currentColor"/></svg>Log hit</span>
+            <span class="done"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Logged</span>
+          </button>
+          <div class="dial-cap">&nbsp;</div>
+        </div>
+      </div>
+      <div class="pv"><canvas id="pv" aria-label="Preview of the selected hold on the target"></canvas></div>
+      <div class="pv-legend">
+        <span><i class="la"></i>Aim, mark <b id="pvMark">2.2</b></span>
+        <span><i class="lb"></i>Table impact <b id="pvImpact">on the head</b></span>
+        <span id="pvHitsL"><i class="lh"></i>Logged hits here <b id="pvHits">0</b></span>
+      </div>
+      </div></div></div>
+    </section>
+
+    <section class="panel pnl-chart" id="pChart">
+      <button class="panel-head" id="hChart" type="button" aria-expanded="false" aria-controls="pChartBody">
+        <svg class="pi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 5v14h16"/><path d="M6 8c5 0 8 2 12 9"/></svg>
+        <span class="pt">Drop chart</span><span class="hint" id="chartHint"></span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <div class="panel-body" id="pChartBody" role="region" aria-labelledby="hChart"><div class="inner"><div class="pad">
+        <div class="dchart" id="dchartBox"><svg id="dropChart" role="img" aria-label="Drop by range, with logged hits"></svg></div>
+        <div class="pv-legend">
+          <span><i class="lt"></i>Table</span><span id="lgCorr"><i class="lc"></i>Corrected</span>
+          <span><i class="lh"></i>Logged hits</span><span><i class="lband"></i>Head 16 cm</span>
+        </div>
+      </div></div></div>
+    </section>
+    <section class="panel pnl-dope" id="pDope">
+      <button class="panel-head" id="hDope" type="button" aria-expanded="false" aria-controls="pDopeBody">
+        <svg class="pi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 10h16M4 15h16M10 4v16"/></svg>
+        <span class="pt">DOPE card</span><span class="hint" id="dopeStep">every 25 m</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <div class="panel-body" id="pDopeBody" role="region" aria-labelledby="hDope"><div class="inner">
+      <div class="tablebox" id="tablebox">
+        <table id="dopeTable">
+          <thead>
+            <tr><th>Range</th><th class="ch">Reticle MOA</th><th class="ch c">Corrected</th><th class="cd">Drop cm</th><th class="cd c">Corrected</th></tr>
+          </thead>
+          <tbody id="dopeBody"></tbody>
+        </table>
+      </div>
+      <div class="dope-foot"><span class="hint" id="dopeNote"></span><button class="btn quiet" id="btnCopy" type="button">Copy table</button></div>
+      </div></div>
+    </section>
+  </section>
+</main>
+
+<!-- Calibration sheet -->
+<dialog class="sheet" id="dlgCal" aria-labelledby="calTitle">
+  <div class="sheet-head"><h2 id="calTitle">Calibration</h2><button class="btn quiet" data-close type="button" autofocus>Close</button></div>
+  <div class="sheet-body">
+    <div class="sec" id="fitSec">
+      <h3>From your hits</h3>
+      <p>Each logged hit gives the real drop at one range. The table is corrected with a drop factor and, with hits at two or more ranges, a zero offset.</p>
+      <div id="fitBox"></div>
+    </div>
+    <div class="sec">
+      <h3>Log a hit</h3>
+      <div class="addshot">
+        <label class="fld n">Range (m)<input id="eDist" type="number" inputmode="numeric" step="1" min="1"></label>
+        <label class="fld n">Reading<input id="eRead" type="number" inputmode="decimal" step="0.05"></label>
+        <label class="fld">Unit
+          <select id="eUnit">
+            <option value="marks">Reticle marks (scope)</option>
+            <option value="adjmil">Adjusted mils</option>
+            <option value="mil">Real mils</option>
+            <option value="moa">Real MOA</option>
+            <option value="cm">cm</option>
+          </select></label>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <label class="fld" style="flex:1;min-width:180px"><span class="sr">Note</span><input id="eNote" placeholder="Note (optional)"></label>
+        <button class="btn primary" id="eAdd" type="button" style="height:40px">Log hit</button>
+      </div>
+      <div class="hint" id="eHint" style="margin-top:8px">Positive = the bullet landed below the center dot.</div>
+      <details>
+        <summary>Paste several hits</summary>
+        <label class="fld" style="margin-top:8px"><span class="sr">Hits, one per line</span><textarea id="eBulk" placeholder="350 2.4&#10;420 3.6&#10;500 5.1"></textarea></label>
+        <div class="row" style="margin-top:8px"><span class="hint">One per line: range and reading, in the unit above.</span><button class="btn" id="eBulkAdd" type="button" style="margin-left:auto">Add all</button></div>
+      </details>
+    </div>
+    <div class="sec">
+      <h3>Logged hits</h3>
+      <div class="chart" id="engChartBox">
+        <svg id="engChart" viewBox="0 0 560 220" role="img" aria-label="Extra hold needed by range"></svg>
+        <div class="legend"><span><i style="background:var(--hold)"></i>Hit</span><span><i style="background:var(--dust-2)"></i>Excluded</span><span><i style="background:var(--fde);border-radius:2px;height:3px;width:14px"></i>Correction</span></div>
+      </div>
+      <button class="btn" id="btnHits" type="button" aria-expanded="false" aria-controls="hitsBox" style="margin-top:12px;width:100%;justify-content:space-between">
+        <span id="hitsLbl">Show logged hits</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <div class="collapse" id="hitsBox"><div class="inner">
+      <div class="tablebox" style="max-height:none;padding:0;margin-top:10px">
+        <table class="shots">
+          <thead><tr><th>Range</th><th>Reading</th><th>Table</th><th>Extra hold</th><th>After fit</th><th title="Use in the fit">Use</th><th><span class="sr">Delete</span></th></tr></thead>
+          <tbody id="eBody"></tbody>
+        </table>
+      </div>
+      <p class="hint" style="margin-top:8px">Table, extra hold and after fit are in reticle marks. Extra hold &gt; 0 means you needed more hold than the table.</p>
+      </div></div>
+    </div>
+    <div class="sec">
+      <h3>Zero</h3>
+      <div class="grid2">
+        <label class="fld n">Scope zeroed at (m)<input id="eZero" type="number" step="25" min="1"></label>
+        <label class="switch" style="align-self:end;height:40px"><input type="checkbox" id="eFitZero"> Fit zero offset</label>
+      </div>
+      <p class="hint" style="margin-top:8px">The zero offset needs hits at two or more ranges. Turn it off to keep the zero fixed.</p>
+    </div>
+    <div class="sec">
+      <h3>Hits file</h3>
+      <div class="row">
+        <button class="btn" id="eExport" type="button">Export</button>
+        <button class="btn" id="eImport" type="button">Import</button>
+        <button class="btn quiet" id="eClear" type="button" style="margin-left:auto">Delete all hits</button>
+      </div>
+      <input type="file" id="eFile" accept=".json,application/json" hidden>
+    </div>
+  </div>
+</dialog>
+
+<!-- Settings sheet -->
+<dialog class="sheet" id="dlgSet" aria-labelledby="setTitle">
+  <div class="sheet-head"><h2 id="setTitle">Settings</h2><button class="btn quiet" data-close type="button" autofocus>Close</button></div>
+  <div class="sheet-body">
+    <div class="sec">
+      <h3>Scope</h3>
+      <div class="grid2" style="margin-top:10px">
+        <label class="fld n">Zoom<input id="vZoom" type="number" step="0.1" min="0.1"></label>
+        <label class="fld n">Scope MOA multiplier<input id="vFudge" type="number" step="0.01" min="0.01"></label>
+        <label class="fld">Reticle
+          <select id="vReticle"><option>Scope MOA (red)</option><option>MOA lines</option><option>Simple Crosshair</option></select></label>
+      </div>
+      <div class="stack">
+        <label class="switch"><input type="checkbox" id="vShowHeads"> Hold indicator on the scope</label>
+        <label class="switch"><input type="checkbox" id="vReal"> Real MOA overlay</label>
+      </div>
+    </div>
+    <div class="sec">
+      <h3>Range</h3>
+      <p>The step is used by the rail, the mouse wheel, the arrow keys and the DOPE card.</p>
+      <div class="fld">Step (m)
+        <div class="row"><div class="chips" id="stepChips"></div><input id="stepCustom" type="number" min="5" step="5" aria-label="Custom step" style="width:90px;height:38px;border-radius:9px;border:1px solid var(--line);background:var(--ground);padding:0 10px;font:600 16px/1 var(--f-num)"></div>
+      </div>
+      <div class="stack">
+        <label class="switch"><input type="checkbox" id="wheelViz"> Mouse wheel over the scope changes range</label>
+      </div>
+      <div class="grid2" style="margin-top:14px">
+        <label class="fld n">Show from (m)<input id="rngMin" type="number" min="0" step="25" inputmode="numeric"></label>
+        <label class="fld n">Show to (m)<input id="rngMax" type="number" min="10" step="25" inputmode="numeric"></label>
+        <button class="btn quiet" id="rngReset" type="button" style="align-self:end;height:40px">Full table range</button>
+      </div>
+      <p class="hint" id="rngNote" style="margin-top:8px"></p>
+      <div class="grid2" style="margin-top:14px">
+        <label class="fld">Zero distance<select id="calSel"></select></label>
+        <label class="fld n">Head size (cm)<input id="vHeadSize" type="number" step="1" min="1"></label>
+        <label class="fld n">Scope mils multiplier<input id="milsMult" type="number" step="0.01" min="0.01"></label>
+      </div>
+      <p class="hint" id="calNote" style="margin-top:8px"></p>
+    </div>
+    <div class="sec" id="tableSec">
+      <h3>Drop table</h3>
+      <dl class="kv" id="kvSetup" style="margin-top:10px"></dl>
+      <div class="row" style="margin-top:14px">
+        <button class="btn" id="btnImport" type="button">Import a table</button>
+        <button class="btn quiet" id="btnReset" type="button">Restore DVL-10 table</button>
+      </div>
+      <p class="hint" style="margin-top:8px">Generate a drop table on tarkovgunsmith.com, copy its rows and import them to load another setup. Hits are kept per table.</p>
+    </div>
+    <div class="sec" id="appSec">
+      <h3>App</h3>
+      <p id="appState">Checking…</p>
+      <div class="row">
+        <button class="btn primary" id="btnInstall2" type="button" hidden>Install app</button>
+        <button class="btn" id="btnUpdate" type="button">Check for updates</button>
+      </div>
+      <p class="hint" id="iosHint" hidden style="margin-top:10px">On iPhone or iPad: open this page in Safari, tap Share, then Add to Home Screen.</p>
+    </div>
+    <div class="sec">
+      <h3>Shortcuts</h3>
+      <dl class="keys" style="margin-top:10px">
+        <dt><kbd>↑</kbd> <kbd>↓</kbd></dt><dd style="margin:0">Closer / farther by one step</dd>
+        <dt><kbd>PgUp</kbd> <kbd>PgDn</kbd></dt><dd style="margin:0">Four steps</dd>
+        <dt><kbd>L</kbd></dt><dd style="margin:0">Go to the held-mark dial (Enter logs the hit)</dd>
+        <dt><kbd>C</kbd></dt><dd style="margin:0">Calibrated on / off</dd>
+        <dt><kbd>F</kbd></dt><dd style="margin:0">Full screen</dd>
+      </dl>
+    </div>
+  </div>
+</dialog>
+
+<!-- Import table -->
+<dialog class="modal" id="dlgImp" aria-labelledby="impTitle">
+  <div class="sheet-head"><h2 id="impTitle">Import a drop table</h2><button class="btn quiet" data-close type="button">Cancel</button></div>
+  <div class="sheet-body">
+    <p class="hint" style="margin:0 0 10px">Paste the rows of the tarkovgunsmith.com drop table. Header lines are ignored.</p>
+    <label class="fld"><span class="sr">Table rows</span><textarea id="impText" style="min-height:200px" placeholder="0 m	43.0	80.0	936.5 m/s	0.00	0.00	-6.86 cm	0.00 cm	0.00 cm	0.00 s"></textarea></label>
+    <div class="grid2" style="margin-top:12px">
+      <label class="fld">Name<input id="impLabel" placeholder="Weapon, barrel, ammo"></label>
+      <label class="fld n">Zero of the table (m)<input id="impCal" type="number" value="50"></label>
+    </div>
+    <div class="note warn" id="impErr" hidden></div>
+    <div class="row" style="margin-top:14px;justify-content:flex-end"><button class="btn primary" id="impOk" type="button">Import table</button></div>
+  </div>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div class="updbar" id="updBar" role="alert" hidden><span>A new version is ready.</span><button class="btn primary" id="updReload" type="button">Reload</button><button class="btn quiet" id="updLater" type="button">Later</button></div>
+
+<script>
+/* ---------- Data (DVL-10 · DVL-10 500mm · 7.62x51mm M80 · calibrated 50 m) ----------
+   row = [distance m, penetration, damage, speed m/s, drop cm, max dispersion radius cm, time of flight s] */
+const DEFAULT_SET = {
+  label: 'DVL-10 · DVL-10 500mm · 7.62x51mm M80',
+  baseCal: 50,
+  generated: 'Tue, 20 Oct 2026 00:49:17 GMT',
+  meta: {
+    caliber:'7.62x51mm', weapon:'DVL-10', barrel:'DVL-10 500mm', velMod:'0.0',
+    ammo:'7.62x51mm M80', pen:'43', dmg:'80', speed:'936.5 m/s', bc:'0.398', diam:'7.85 mm', mass:'9.5 g',
+    hob:'68.58 mm'
+  },
+  rows: [
+[0,43.0,80.0,936.5,-6.86,0.00,0.00],[10,42.7,79.4,921.5,-5.25,0.25,0.02],[20,42.5,79.0,914.1,-3.77,0.50,0.03],
+[25,42.5,79.0,914.1,-3.07,0.62,0.03],[30,42.3,78.7,906.8,-2.39,0.75,0.04],[40,42.2,78.4,899.7,-1.14,0.99,0.05],
+[50,42.0,78.1,892.6,0.00,1.24,0.06],[60,41.8,77.8,885.6,1.01,1.49,0.07],[70,41.7,77.5,878.7,1.91,1.74,0.08],
+[75,41.5,77.2,871.9,2.30,1.86,0.09],[80,41.5,77.2,871.9,2.67,1.99,0.09],[90,41.4,77.0,865.2,3.31,2.24,0.10],
+[100,41.1,76.4,852.0,3.81,2.49,0.12],[110,40.9,76.1,845.5,4.17,2.73,0.13],[120,40.8,75.8,839.1,4.40,2.98,0.14],
+[125,40.6,75.6,832.8,4.48,3.11,0.15],[130,40.6,75.6,832.8,4.50,3.23,0.15],[140,40.5,75.3,826.6,4.46,3.48,0.16],
+[150,40.2,74.8,814.3,4.26,3.73,0.18],[160,40.1,74.5,808.2,3.92,3.98,0.19],[170,39.9,74.3,802.2,3.43,4.23,0.20],
+[180,39.8,74.0,796.3,2.80,4.47,0.21],[190,39.5,73.5,784.6,2.00,4.72,0.23],[200,39.4,73.3,778.9,1.04,4.97,0.24],
+[210,39.3,73.0,773.2,-0.07,5.22,0.25],[220,39.1,72.8,767.6,-1.34,5.47,0.26],[230,38.9,72.3,756.5,-2.79,5.72,0.28],
+[240,38.7,72.1,751.1,-4.41,5.97,0.29],[250,38.6,71.8,745.7,-6.19,6.21,0.30],[260,38.4,71.4,735.1,-8.16,6.46,0.32],
+[270,38.3,71.2,729.8,-10.31,6.71,0.33],[280,38.1,71.0,724.6,-12.62,6.96,0.34],[290,37.9,70.5,714.4,-15.15,7.21,0.36],
+[300,37.8,70.3,709.3,-17.86,7.46,0.37],[310,37.6,69.9,699.4,-20.76,7.71,0.39],[320,37.4,69.7,694.4,-23.86,7.96,0.40],
+[330,37.2,69.2,684.7,-27.16,8.20,0.42],[340,37.1,69.0,679.9,-30.68,8.45,0.43],[350,37.0,68.8,675.1,-34.39,8.70,0.44],
+[360,36.8,68.4,665.7,-38.34,8.95,0.46],[370,36.7,68.2,661.0,-42.49,9.20,0.47],[380,36.5,67.8,651.9,-46.89,9.45,0.49],
+[390,36.3,67.5,642.8,-51.50,9.70,0.51],[400,36.2,67.3,638.3,-56.36,9.94,0.52],[410,35.9,66.9,629.4,-61.44,10.19,0.54],
+[420,35.8,66.7,624.9,-66.78,10.44,0.55],[430,35.6,66.3,616.2,-72.37,10.69,0.57],[440,35.5,66.1,611.8,-78.20,10.94,0.58],
+[450,35.3,65.8,603.2,-84.32,11.19,0.60],[460,35.2,65.4,594.6,-90.70,11.44,0.62],[470,35.1,65.2,590.3,-97.34,11.68,0.63],
+[480,34.9,64.9,581.9,-104.29,11.93,0.65],[490,34.7,64.5,573.3,-111.51,12.18,0.67],[500,34.5,64.1,565.0,-119.03,12.43,0.69],
+[510,34.4,63.9,560.6,-126.85,12.68,0.70],[520,34.2,63.6,552.1,-135.00,12.93,0.72],[530,34.0,63.2,543.6,-143.46,13.18,0.74],
+[540,33.8,62.9,535.1,-152.25,13.42,0.76],[550,33.6,62.5,526.8,-161.38,13.67,0.78],[560,33.4,62.2,518.6,-170.86,13.92,0.80],
+[570,33.2,61.8,510.9,-180.71,14.17,0.82],[580,33.0,61.5,503.0,-190.92,14.42,0.84],[590,32.9,61.2,495.5,-201.52,14.67,0.86],
+[600,32.7,60.8,487.8,-212.52,14.92,0.88],[610,32.5,60.5,480.6,-223.92,15.16,0.90],[620,32.4,60.2,473.5,-235.75,15.41,0.92],
+[630,32.2,59.9,466.6,-248.01,15.66,0.94],[640,32.1,59.6,460.1,-260.72,15.91,0.96],[650,31.9,59.4,453.5,-273.89,16.16,0.98]
+  ]
+};
+const CALIBRATIONS = [25,50,75,100,125,150,200,250,300,350,400,450];
+const STEP_PRESETS = [5,10,25,50,100];
+const SCOPE = 'Scope MOA (red)';
+
+/* ---------- State & preferences ---------- */
+const $ = s => document.querySelector(s);
+const reduceMotion = () => window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+const state = { cal:null, milsMult:1, dist:340, zoom:3.10, fudge:1.42, reticle:SCOPE,
+  showReal:false, showHeads:true, headSize:16, panStep:25, wheelViz:true, vizCorr:true, panelsM:{}, panelsD:{}, rangeMin:0, rangeMax:0 };
+const PREF_KEYS=['milsMult','dist','zoom','fudge','reticle','showReal','showHeads','headSize','panStep','wheelViz','vizCorr','panelsM','panelsD','rangeMin','rangeMax'];
+try{ const p=JSON.parse(localStorage.getItem('bv_prefs')||'null');
+  if(p) for(const k of PREF_KEYS) if(k in p && typeof p[k]===typeof state[k]) state[k]=p[k];
+  else { const vc=localStorage.getItem('bv_vizCorr'); if(vc!==null) state.vizCorr=vc==='1';
+         const ps=+localStorage.getItem('bv_panStep'); if(ps>0) state.panStep=ps; } }catch(e){}
+let prefT; function savePrefs(){ clearTimeout(prefT); prefT=setTimeout(()=>{ try{ const o={}; for(const k of PREF_KEYS) o[k]=state[k]; localStorage.setItem('bv_prefs', JSON.stringify(o)); }catch(e){} },200); }
+
+function loadSaved(){ try{ const t=localStorage.getItem('bv_dataset'); if(t){ const o=JSON.parse(t); if(o && Array.isArray(o.rows) && o.rows.length>2) return o; } }catch(e){} return null; }
+function saveSet(ds){ try{ localStorage.setItem('bv_dataset', JSON.stringify(ds)); }catch(e){} }
+function clearSaved(){ try{ localStorage.removeItem('bv_dataset'); }catch(e){} }
+
+let DS = loadSaved() || DEFAULT_SET;
+state.cal = DS.baseCal;
+const maxDist = () => DS.rows[DS.rows.length-1][0];
+
+/* ---------- Data helpers ---------- */
+function interpDrop(rows, x){
+  for(let i=1;i<rows.length;i++){ const a=rows[i-1], b=rows[i];
+    if(x>=a[0] && x<=b[0]){ const t=(x-a[0])/((b[0]-a[0])||1); return a[4]+(b[4]-a[4])*t; } }
+  return rows[rows.length-1][4];
+}
+// Re-zero approximation: tilt the trajectory so drop = 0 at the new calibration distance.
+let brCache=null;
+function baseRows(Z){
+  if(brCache && brCache.ds===DS && brCache.z===Z) return brCache.rows;
+  const base=DS.rows, B=DS.baseCal;
+  const k = (Z===B) ? 0 : interpDrop(base, Z)/Z;
+  const rows = base.map(r=>{ const drop = r[4] - k*r[0];
+    return {dist:r[0], pen:r[1], dmg:r[2], speed:r[3], drop, disp:r[5], tof:r[6]}; });
+  brCache={ds:DS, z:Z, rows}; return rows;
+}
+// Rows with the engagement correction applied (when `apply` and a fit exists).
+function getRows(apply){
+  const rows=baseRows(state.cal);
+  const C = apply ? currentFit() : null;
+  if(!C || !C.ok) return rows;
+  return rows.map(r=>({...r, baseDrop:r.drop, drop:r.drop+corrAt(C, r.dist, state.cal)}));
+}
+function interpRow(rows, dist){
+  const ex = rows.find(r=>r.dist===dist); if(ex) return ex;
+  for(let i=1;i<rows.length;i++){ const a=rows[i-1], b=rows[i];
+    if(dist>a.dist && dist<b.dist){ const t=(dist-a.dist)/(b.dist-a.dist);
+      return {dist, drop:a.drop+(b.drop-a.drop)*t, disp:a.disp+(b.disp-a.disp)*t}; } }
+  return null;
+}
+
+/* ---------- Engagement correction model ----------
+   Observed drop = table drop − a·G(x) + θ·x
+     G(x): gravity part of the drop, ½·g·t(x)², t(x) integrated from the table speeds
+     a   : extra gravity drop (drop factor = 1 + a; a slower bullet than the table → a > 0)
+     θ   : zero offset (cm per m of range). With the zero fixed, θ keeps drop = 0 at the zero distance. */
+let gCache=null;
+function gAt(x){
+  if(!gCache || gCache.ds!==DS){
+    const xs=[0], gs=[0]; let t=0;
+    for(let i=1;i<DS.rows.length;i++){ const a=DS.rows[i-1], b=DS.rows[i];
+      t += (b[0]-a[0]) * (1/a[3] + 1/b[3]) / 2; xs.push(b[0]); gs.push(0.5*9.81*t*t*100); }
+    gCache={ds:DS, xs, gs};
+  }
+  const {xs,gs}=gCache;
+  if(x<=0) return 0;
+  for(let i=1;i<xs.length;i++) if(x<=xs[i]){ const f=(x-xs[i-1])/(xs[i]-xs[i-1]); return gs[i-1]+(gs[i]-gs[i-1])*f; }
+  const n=xs.length-1, sl=(gs[n]-gs[n-1])/(xs[n]-xs[n-1]); return gs[n]+sl*(x-xs[n]);
+}
+function corrAt(C, x, cal){
+  if(!C || !C.ok || x<=0) return 0;
+  const th = C.fixedZero ? C.a*gAt(cal)/cal : C.th;
+  return -C.a*gAt(x) + th*x;
+}
+const engKey=()=>'bv_eng::'+(DS.label||'table');
+function loadEng(){
+  const def={ list:[], zero:DS.baseCal, fitZero:true, unit:'marks', apply:true };
+  try{ const t=localStorage.getItem(engKey()); if(t){ const o=JSON.parse(t); if(o && Array.isArray(o.list)) return {...def, ...o}; } }catch(e){}
+  return def;
+}
+let ENG = loadEng();
+let fitCache=null;
+function saveEng(){ try{ localStorage.setItem(engKey(), JSON.stringify(ENG)); }catch(e){} }
+function currentFit(){ if(!fitCache) fitCache=computeFit(); return fitCache; }
+
+function unitCm(unit, dist, factor){        // cm per 1 unit of reading at this distance
+  const moaCm=dist/100*2.909, milCm=dist/10, f=factor>0?factor:1;
+  return unit==='marks' ? f*moaCm : unit==='adjmil' ? milCm/f : unit==='mil' ? milCm : unit==='moa' ? moaCm : 1;
+}
+const unitFactor = unit => unit==='marks' ? (Number(state.fudge)||1) : unit==='adjmil' ? (Number(state.milsMult)||1) : 1;
+const UNIT_SHORT = {marks:'marks', adjmil:'adj mil', mil:'mil', moa:'MOA', cm:'cm'};
+
+function computeFit(){
+  const maxD=maxDist();
+  const Zs = ENG.zero>0 ? ENG.zero : DS.baseCal;
+  const rows = baseRows(Zs);
+  const used = ENG.list.filter(s=>s.use && s.dist>0 && s.dist<=maxD);
+  const pts = used.map(s=>{ const r=interpRow(rows, s.dist)||rows[rows.length-1];
+    return {s, x:s.dist, D0:r.drop, r:s.cm-r.drop, G:gAt(s.dist), w:1/(r.disp*r.disp+1)}; });
+  const res={ok:false, n:pts.length, Zs, pts};
+  if(!pts.length) return res;
+  const distinct=new Set(pts.map(p=>p.x)).size;
+  let free = ENG.fitZero && distinct>=2, a=0, th=0, ok=false;
+  if(free){
+    let A11=0,A12=0,A22=0,b1=0,b2=0;
+    for(const p of pts){ const u=-p.G, v=p.x; A11+=p.w*u*u; A12+=p.w*u*v; A22+=p.w*v*v; b1+=p.w*u*p.r; b2+=p.w*v*p.r; }
+    const det=A11*A22-A12*A12;
+    if(Math.abs(det)>1e-9*A11*A22){ a=(b1*A22-b2*A12)/det; th=(A11*b2-A12*b1)/det; ok=true; } else free=false;
+  }
+  if(!free){
+    const GZ=gAt(Zs); let num=0, den=0;
+    for(const p of pts){ const H=p.G-GZ*p.x/Zs; num+=p.w*(-H)*p.r; den+=p.w*H*H; }
+    if(den>1e-9){ a=num/den; th=a*GZ/Zs; ok=true; }
+  }
+  if(!ok) return res;
+  const C={ok:true, a, th, fixedZero:!free};
+  for(const p of pts){ p.fit=corrAt(C, p.x, Zs); p.after=p.r-p.fit; }
+  const rms=v=>Math.sqrt(v.reduce((q,x)=>q+x*x,0)/v.length);
+  let zeroAt=null;
+  if(free){ let prev=null, best=null;
+    for(let x=1;x<=Math.min(maxD,400);x+=0.5){ const r=interpRow(rows,x); if(!r) continue;
+      const y=r.drop+corrAt(C,x,Zs);
+      if(prev && Math.sign(prev.y)!==Math.sign(y)){ const xz=prev.x+(x-prev.x)*prev.y/(prev.y-y); if(best==null||Math.abs(xz-Zs)<Math.abs(best-Zs)) best=xz; }
+      prev={x,y}; }
+    zeroAt=best; }
+  return {...res, ...C, s:1+a, distinct, rmsBefore:rms(pts.map(p=>p.r)), rmsAfter:rms(pts.map(p=>p.after)), zeroAt};
+}
+
+/* Hold in reticle marks: positive = hold under the center dot (bullet drops). */
+const markCm = (dist, f) => dist/100*2.909*(f>0?f:(Number(state.fudge)||1));
+const holdOf = (drop, dist) => dist>0 ? -drop/markCm(dist) : 0;
+const MINUS='−';
+const rz = (v,d) => Math.abs(v) < 0.5*Math.pow(10,-d) ? 0 : v;          // no "−0.0"
+const fmt = (v,d) => { v=rz(v,d); return (v<0? MINUS:'') + Math.abs(v).toFixed(d); };
+const fmtS = (v,d) => { v=rz(v,d); return (v>0?'+':v<0?MINUS:'') + Math.abs(v).toFixed(d); };
+function valuesAt(dist){
+  const b = interpRow(baseRows(state.cal), dist); if(!b) return null;
+  const C = currentFit();
+  return { dist, base:b.drop, corr: C.ok ? b.drop + corrAt(C, dist, state.cal) : null, disp:b.disp };
+}
+function vizRows(){ return getRows(state.vizCorr).filter(r=>r.dist>0); }
+/* Visible range (Settings → Range): what the rail, dials, chart and DOPE card show */
+const viewMin=()=>Math.max(0, Math.min(state.rangeMin>0?state.rangeMin:0, maxDist()-10));
+const viewMax=()=>Math.min(maxDist(), Math.max(state.rangeMax>0?state.rangeMax:maxDist(), viewMin()+10));
+function currentVizRow(){
+  const rows=vizRows(); if(!rows.length) return null;
+  const [minD,maxD]=distBounds();
+  if(!(state.dist>=minD)) state.dist=minD;
+  if(state.dist>maxD) state.dist=maxD;
+  return rows.find(x=>x.dist===state.dist) || interpRow(rows, state.dist) || rows[0];
+}
+const headSize = () => state.headSize>0 ? state.headSize : 16;
+
+/* ---------- Scope canvas (reticle and target drawing unchanged) ---------- */
+function drawViz(){
+  const row=currentVizRow(); if(!row) return;
+  drawScope($('#viz'), { dist:row.dist, drop:row.drop, disp:row.disp, minW: (($('#viz').clientWidth||575)>=500 ? 575 : (isFs()?340:420)) });
+}
+/* Draws the scope view. o: {dist, drop, disp, H=550, minW, hold (marks; default = the hold that puts the bullet on the head), markers, hits[]} */
+function drawScope(cv, o){
+  const ctx=cv.getContext('2d');
+  // The view widens/narrows with the box; the vertical framing (550 units) and scale are the original ones.
+  const cw=cv.clientWidth||575, ch=cv.clientHeight||550; if(!cw||!ch) return;
+  const H=o.H||550, W=Math.max(o.minW||420, Math.min(1400, H*cw/ch)), X=W/2, Y=H/2;   // target center (head center)
+  const dpr=window.devicePixelRatio||1, k=Math.max(.5, Math.min(4, Math.min(cw/W, ch/H)*dpr));
+  const pw=Math.round(W*k), ph=Math.round(H*k);
+  if(cv.width!==pw || cv.height!==ph){ cv.width=pw; cv.height=ph; }
+  const r=o.dist, zoom=state.zoom>0?state.zoom:1, fudge=Number(state.fudge)||1;
+  const drop=o.drop, disp=o.disp;
+  const c = 100/r*1.97104*zoom;        // px per cm at this distance
+  const moaCm = r/100*2.909;           // cm per MOA at this distance
+  const d = moaCm*c;                   // px per MOA
+  const mkPx = moaCm*fudge*c;          // px per reticle mark
+  const fy = o.hold==null ? Y + drop*c : Y - o.hold*mkPx;   // reticle (sight zero) y; the held mark sits on the head
+  const iy = fy - drop*c;              // where the bullet lands (= head center when holding the table value)
+
+  const line=(x1,y1,x2,y2)=>{ ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke(); };
+  ctx.setTransform(k,0,0,k,0,0); ctx.lineWidth=1; ctx.textAlign='left'; ctx.textBaseline='alphabetic';
+  ctx.fillStyle='rgb(20, 26, 34)'; ctx.fillRect(0,0,W,H);
+
+  const circle=col=>{ ctx.beginPath(); ctx.arc(X,iy,disp*c,0,2*Math.PI); ctx.fillStyle=col; ctx.fill(); ctx.strokeStyle='white'; ctx.lineWidth=1; ctx.stroke(); };
+  if(disp>9) circle('rgba(255, 253, 111, 0.8)');
+  // Silhouette: head 16 cm, torso 48x70, legs 32x84
+  ctx.fillStyle='rgb(117, 167, 1)';   ctx.fillRect(X-8*c, Y-8*c, 16*c, 16*c);
+  ctx.fillStyle='rgb(117, 167, 120)'; ctx.fillRect(X-24*c, Y+8*c, 48*c, 70*c);
+  ctx.fillStyle='rgb(117, 167, 163)'; ctx.fillRect(X-16*c, Y+78*c, 32*c, 84*c);
+  if(disp>9) circle('rgba(255, 253, 111, 0.2)'); else circle('rgba(0, 110, 255, 0.90)');
+
+  function moaReticle(col, scale){
+    ctx.strokeStyle=col; ctx.fillStyle=col;
+    const a=d*scale, len=30*a, sm=.25*a, lg=.5*a;
+    ctx.font=`${1.7*d}px Arial`;
+    line(X-len,fy,X+len,fy); line(X,fy-len,X,fy+2*len);
+    // Horizontal axis is kept as a plain line: no mil-dot ticks or numbers on it.
+    for(let k=1;k<=30;k++){ const t=k%5?sm:lg, o=k*a;
+      line(X-t,fy-o,X+t,fy-o); if(k%5===0) ctx.fillText(k,X+1.5*t,fy-o); }
+    for(let k=1;k<=60;k++){ const t=k%5?sm:lg, o=k*a;
+      line(X-t,fy+o,X+t,fy+o); if(k%5===0) ctx.fillText(k,X+1.5*t,fy+o); }
+  }
+  // Scope reticle (matches the reference image): tapered black posts left/right/top,
+  // red MOA scale: ±10 horizontal (numbers at 5/10), 10 up with an end bar, down numbered every 5
+  // with wide bars at 10/20/30, and a center dot. One mark = `scale` real MOA.
+  function scopeReticle(col, scale, posts){
+    const u=d*scale, far=4000, slope=0.034, tip=12*u;
+    if(posts){
+      ctx.fillStyle='rgb(4, 4, 6)'; ctx.strokeStyle='rgba(255, 255, 255, 0.5)'; ctx.lineWidth=1;
+      const hw=(far-tip)*slope;
+      const tri=(ax,ay,bx,by,cx2,cy2)=>{ ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(bx,by); ctx.lineTo(cx2,cy2); ctx.closePath(); ctx.fill(); ctx.stroke(); };
+      tri(X, fy-tip, X-hw, fy-far, X+hw, fy-far);          // top
+      tri(X-tip, fy, X-far, fy-hw, X-far, fy+hw);          // left
+      tri(X+tip, fy, X+far, fy-hw, X+far, fy+hw);          // right
+    }
+    ctx.strokeStyle=col; ctx.fillStyle=col; ctx.lineWidth=Math.max(1, 0.16*u); ctx.lineCap='butt';
+    const gap=0.6*u, fs=Math.max(9, 1.3*u);
+    ctx.font=`${fs}px Arial`;
+    // horizontal
+    line(X-10*u, fy, X-gap, fy); line(X+gap, fy, X+10*u, fy);
+    ctx.textAlign='center'; ctx.textBaseline='bottom';
+    for(let k=1;k<=10;k++){ const h = k===10 ? 0.8*u : k%5===0 ? 0.6*u : 0.35*u, o=k*u;
+      line(X-o, fy-h, X-o, fy+h); line(X+o, fy-h, X+o, fy+h);
+      if(k%5===0){ ctx.fillText(k, X-o, fy-1.0*u); ctx.fillText(k, X+o, fy-1.0*u); } }
+    // vertical up (no numbers)
+    line(X, fy-10*u, X, fy-gap);
+    for(let k=1;k<=10;k++){ const h = k===10 ? 1.0*u : k%5===0 ? 0.6*u : 0.35*u, o=k*u; line(X-h, fy-o, X+h, fy-o); }
+    // vertical down, numbered every 5
+    line(X, fy+gap, X, fy+30*u);
+    ctx.textAlign='left'; ctx.textBaseline='middle';
+    for(let k=1;k<=30;k++){ const h = k%10===0 ? 1.5*u : k%5===0 ? 0.6*u : 0.35*u, o=k*u;
+      line(X-h, fy+o, X+h, fy+o); if(k%5===0) ctx.fillText(k, X+1.9*u, fy+o); }
+    // center dot
+    ctx.beginPath(); ctx.arc(X, fy, Math.max(1.2, 0.18*u), 0, 2*Math.PI); ctx.fill();
+    ctx.lineWidth=1; ctx.textAlign='left'; ctx.textBaseline='alphabetic';
+  }
+  const isScope = state.reticle===SCOPE;
+  if(state.reticle==='Simple Crosshair'){
+    ctx.strokeStyle='rgba(0, 0, 0, 1)'; const o=30*d; line(X-o,fy,X+o,fy); line(X,fy-o,X,fy+2*o);
+  }
+  if(isScope) scopeReticle('rgb(228, 32, 40)', fudge, true);
+  if(fudge!==1 && state.reticle!=='Simple Crosshair' && state.showReal){
+    if(isScope) scopeReticle('rgba(255, 0, 221, 0.75)', 1, false); else moaReticle('rgba(255, 0, 221, 0.75)', 1); }
+  if(state.reticle==='MOA lines') moaReticle('rgba(255, 255, 255, 1)', fudge);
+
+  const f=1.7*d;
+  const showInd = Math.abs(drop)>1;
+  const fitLabel=(txt, avail)=>{ let fs=f; ctx.font=`${fs}px 'Consolas', 'Courier New', monospace`;
+    let w=ctx.measureText(txt).width;
+    if(w>avail && avail>20){ fs=f*avail/w; ctx.font=`${fs}px 'Consolas', 'Courier New', monospace`; w=ctx.measureText(txt).width; }
+    return [fs,w]; };
+
+  // Right: Drop / Rise indicator
+  if(showInd){
+    const col='rgba(102, 216, 56, 1)'; ctx.strokeStyle=col; ctx.fillStyle=col;
+    const L=drop*c, sx=X+5*d;
+    line(sx,fy,sx,fy-L); line(sx-10,fy-L,sx+10,fy-L);
+    const txt=`${drop>0?'Rise':'Drop'}: ${drop.toFixed(1)}cm`;
+    const [fs,w]=fitLabel(txt, W-(sx+13)-4);
+    ctx.fillStyle='rgba(0, 0, 0, .4)'; ctx.fillRect(sx+11, fy-L+15, w+4, -(fs+3));
+    ctx.fillStyle=col; ctx.fillText(txt, sx+13, fy-L+10);
+  }
+  // Left: 170 cm height bar
+  { const col='rgba(255, 255, 255, 1)'; ctx.strokeStyle=col; ctx.fillStyle=col;
+    const a=.5*d, h=170*c, bx=X-24*c-d, top=Y-8*c;
+    line(bx,top,bx,top+h); line(bx-a,top,bx+a,top); line(bx-a,top+h,bx+a,top+h);
+    ctx.font=`${1.7*d}px Arial`; ctx.fillText('170cm', bx-7*a, top+h+2*d); }
+  // Left: reticle MOA (marks) between sight zero and head center
+  if(showInd && state.showHeads){
+    const col='rgba(255, 176, 46, 1)'; ctx.strokeStyle=col; ctx.fillStyle=col;
+    const mk=moaCm*fudge, marks=o.hold==null ? Math.abs(drop)/mk : Math.abs(o.hold), step=fudge*d;
+    const hx=X-5*d, y0=fy, y1=Y, span=Math.abs(y1-y0), sgn=Math.sign(y1-y0)||1;
+    line(hx,y0,hx,y1); line(hx-10,y1,hx+10,y1);
+    if(step>=3){
+      const tw=Math.max(4,.35*d), fs=Math.max(10,.9*d);
+      ctx.font=`${fs}px Arial`; ctx.textAlign='right'; ctx.textBaseline='middle';
+      for(let k=1; k*step < span-0.5; k++){
+        const y=y0+sgn*k*step; line(hx-tw,y,hx+tw,y);
+        if(step>=fs*1.2 && Math.abs(y1-y)>f+6) ctx.fillText(k, hx-tw-3, y);
+      }
+      ctx.textAlign='left'; ctx.textBaseline='alphabetic';
+    }
+    const txt=`Reticle MOA: ${marks.toFixed(1)}`;
+    const [fs,w]=fitLabel(txt, hx-13-4);
+    ctx.fillStyle='rgba(0, 0, 0, .4)'; ctx.fillRect(hx-11-w-4, y1+15, w+4, -(fs+3));
+    ctx.fillStyle=col; ctx.textAlign='right'; ctx.fillText(txt, hx-13, y1+10); ctx.textAlign='left';
+  }
+  // Preview markers: logged hits (orange), aim at the held mark (cyan), table impact (pink)
+  if(o.markers){
+    const rr=Math.max(4,.55*d);
+    for(const m of (o.hits||[])){ const y=fy+m*mkPx;
+      ctx.fillStyle='rgba(255,176,46,.95)'; ctx.strokeStyle='rgba(0,0,0,.7)'; ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.moveTo(X+2.2*rr,y-rr*.8); ctx.lineTo(X+2.2*rr+rr*.8,y); ctx.lineTo(X+2.2*rr,y+rr*.8); ctx.lineTo(X+2.2*rr-rr*.8,y); ctx.closePath(); ctx.fill(); ctx.stroke(); }
+    // A: aim — the held mark placed on the head
+    ctx.strokeStyle='#38D6FF'; ctx.lineWidth=Math.max(2,.22*d);
+    line(X-2.6*rr, Y, X-1.3*rr, Y); line(X+1.3*rr, Y, X+2.6*rr, Y);
+    ctx.beginPath(); ctx.arc(X, Y, 1.3*rr, 0, 2*Math.PI); ctx.stroke();
+    // B: estimated impact from the table
+    ctx.fillStyle='#FF5CA8'; ctx.strokeStyle='rgba(255,255,255,.9)'; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.arc(X, iy, Math.max(3.5,.42*rr+2), 0, 2*Math.PI); ctx.fill(); ctx.stroke();
+    ctx.lineWidth=1;
+  }
+}
+
+/* ---------- Number tweens (respond to range changes) ---------- */
+function tween(el, to, dec, ms=220){
+  const from = el._v ?? to; el._v = to;
+  cancelAnimationFrame(el._raf);
+  if(reduceMotion() || from===to || ms<=0){ el.textContent = fmt(to,dec); return; }
+  const t0=performance.now(), ease=t=>1-Math.pow(1-t,3);
+  const stepF=now=>{ const t=Math.min(1,(now-t0)/ms); el.textContent=fmt(from+(to-from)*ease(t),dec); if(t<1) el._raf=requestAnimationFrame(stepF); };
+  el._raf=requestAnimationFrame(stepF);
+}
+
+/* ---------- Readout ---------- */
+function renderReadout(){
+  const row=currentVizRow(); if(!row) return;
+  const v=valuesAt(state.dist), C=currentFit(), useCorr = state.vizCorr && C.ok;
+  const holdBase=holdOf(v.base, state.dist), holdCorr = C.ok ? holdOf(v.corr, state.dist) : null;
+  tween($('#roDist'), state.dist, 0);
+  tween($('#roHold'), useCorr ? holdCorr : holdBase, 1);
+  const tag=$('#holdTag'); tag.textContent = useCorr ? 'Calibrated' : 'Table'; tag.classList.toggle('on', useCorr);
+  $('#holdSub').innerHTML = C.ok
+    ? (useCorr ? `Table <b>${fmt(holdBase,1)}</b>, shift <b>${fmtS(holdCorr-holdBase,1)}</b> from ${C.n} hit${C.n===1?'':'s'}`
+               : `Calibrated <b>${fmt(holdCorr,1)}</b> from ${C.n} hit${C.n===1?'':'s'}. Turn on Calibrated to aim with it.`)
+    : (ENG.list.length ? 'Not enough hits to calibrate yet.' : 'Log hits below to calibrate this setup.');
+  const moaCm=state.dist/100*2.909;
+  $('#stDrop').textContent = fmt(row.drop,1)+' cm';
+  $('#stMoa').textContent = fmt(row.drop/moaCm,2);
+  $('#stHeads').textContent = (Math.abs(row.drop)/headSize()).toFixed(2);
+  $('#stDisp').textContent = '±'+row.disp.toFixed(1)+' cm';
+  syncLogger(useCorr ? holdCorr : holdBase);
+  const st=panStep(); $('#vMinus').textContent=MINUS+st; $('#vPlus').textContent='+'+st;
+  const cb=$('#vCorr'); cb.checked = state.vizCorr && C.ok; cb.disabled = !C.ok;
+  $('#calibWrap').title = C.ok ? 'Aim with the drop corrected by your logged hits (C)' : 'Log hits to enable calibration';
+  $('#shotCount').textContent = ENG.list.length || '';
+  $('#zVal').textContent = (+state.zoom).toFixed(1)+'×';
+  $('#hudDist').textContent = state.dist; $('#hudHold').textContent = fmt(useCorr ? holdCorr : holdBase, 1);
+  $('#hudTag').textContent = useCorr ? 'Hold, calibrated' : 'Hold, table';
+  $('#tHold').setAttribute('aria-pressed', state.showHeads);
+}
+
+/* ---------- DOPE card ---------- */
+let dopeKey='';
+function dopeDists(){
+  const [minD,maxD]=distBounds(), st=Math.max(5, panStep()), out=[];
+  for(let d=Math.max(st, Math.ceil(minD/st)*st); d<=maxD+1e-9; d+=st) out.push(Math.round(d*100)/100);
+  if(minD>0 && !out.includes(minD) && minD%st) out.unshift(minD);
+  if(out[out.length-1]!==maxD) out.push(maxD);
+  if(state.dist>=minD && state.dist<=maxD && !out.includes(state.dist)){ out.push(state.dist); out.sort((a,b)=>a-b); }
+  return out;
+}
+function renderDope(){
+  const C=currentFit();
+  const offGrid = state.dist % Math.max(5,panStep()) ? state.dist : '';
+  const key=[DS.label, viewMin(), viewMax(), state.cal, panStep(), state.fudge, offGrid, C.ok?C.a.toFixed(6)+'|'+C.th.toFixed(8)+'|'+C.fixedZero:'-'].join('/');
+  if(key!==dopeKey){
+    dopeKey=key;
+    const rows=dopeDists().map(d=>{ const v=valuesAt(d); if(!v) return '';
+      const hb=holdOf(v.base,d), hc=v.corr!=null?holdOf(v.corr,d):null;
+      const extra = d===offGrid ? ' class="extra" title="Selected range, off the step grid"' : '';
+      return `<tr data-d="${d}"${extra}><td>${d}</td><td class="h0">${fmt(hb,1)}</td><td class="${hc==null?'na':'h1'}">${hc==null?'—':fmt(hc,1)}</td>`+
+             `<td class="d0">${fmt(v.base,1)}</td><td class="${hc==null?'na':'d1'}">${hc==null?'—':fmt(v.corr,1)}</td></tr>`; });
+    $('#dopeBody').innerHTML=rows.join('');
+    $('#dopeStep').textContent=`every ${Math.max(5,panStep())} m`;
+    $('#dopeNote').textContent = C.ok ? `Corrected with ${C.n} hit${C.n===1?'':'s'}` : 'Corrected columns fill in after you log hits';
+  }
+  highlightDope();
+}
+function scrollParent(el){ for(let p=el.parentElement;p;p=p.parentElement){ const o=getComputedStyle(p).overflowY; if((o==='auto'||o==='scroll') && p.scrollHeight>p.clientHeight+1) return p; } return null; }
+function highlightDope(){
+  const body=$('#dopeBody'); let sel=null;
+  body.querySelectorAll('tr').forEach(tr=>{ const on=+tr.dataset.d===state.dist; tr.classList.toggle('sel',on); if(on) sel=tr; });
+  const box = sel && scrollParent(sel);
+  if(box && box.id==='tablebox'){                    // keep the selected row in view inside the card's own scroller
+    const head=$('#dopeTable thead').offsetHeight, foot=box.id==='tablebox'?0:($('.dope-foot').offsetHeight||0);
+    const r=sel.getBoundingClientRect(), b=box.getBoundingClientRect();
+    if(r.top < b.top+head || r.bottom > b.bottom-foot){
+      const target = box.scrollTop + (r.top - b.top) - (box.clientHeight - r.height)/2;
+      box.scrollTo({top:Math.max(0,target), behavior: reduceMotion()?'auto':'smooth'}); } }
+}
+function copyDope(){
+  const lines=['Range m\tReticle MOA\tReticle MOA corrected\tDrop cm\tDrop corrected cm'];
+  for(const d of dopeDists()){ const v=valuesAt(d); if(!v) continue;
+    lines.push([d, holdOf(v.base,d).toFixed(1), v.corr!=null?holdOf(v.corr,d).toFixed(1):'', v.base.toFixed(1), v.corr!=null?v.corr.toFixed(1):''].join('\t')); }
+  const txt=lines.join('\n');
+  (navigator.clipboard?.writeText(txt) ?? Promise.reject()).then(()=>toast('DOPE card copied')).catch(()=>{
+    const ta=document.createElement('textarea'); ta.value=txt; document.body.appendChild(ta); ta.select();
+    try{ document.execCommand('copy'); toast('DOPE card copied'); }catch(e){ toast('Copy failed'); } ta.remove(); });
+}
+
+/* ---------- Range rail ---------- */
+const panStep=()=>state.panStep>0?state.panStep:25;
+function distBounds(){ const first=DS.rows.find(r=>r[0]>0)[0]; return [Math.max(first, viewMin()), viewMax()]; }
+function snapDist(raw){
+  const [minD,maxD]=distBounds(), st=panStep();
+  let v=Math.round(raw/st)*st;
+  if(Math.abs(raw-maxD)<Math.abs(raw-v) || v>maxD) v=maxD;
+  if(v<minD){ const first=Math.ceil(minD/st)*st; v = first<=maxD ? first : minD; }
+  return v;
+}
+function stepPan(dir){
+  const [minD,maxD]=distBounds(), st=panStep(), cur=state.dist;
+  let v;
+  if(dir>0){ v=(Math.floor(cur/st+1e-9)+1)*st; if(v>maxD) v=maxD; }
+  else { v=(Math.ceil(cur/st-1e-9)-1)*st; if(v<minD){ const first=Math.ceil(minD/st)*st; v = first<cur ? first : (minD<cur?minD:cur); } }
+  if(v!==cur) selectDist(v);
+}
+let railKey='';
+function updateRail(){
+  const rail=$('#rail'), vmin=viewMin(), vmax=viewMax(), span=vmax-vmin, at=m=>(m-vmin)/span*100;
+  const key=vmin+'|'+vmax+'|'+state.cal+'|'+ENG.list.map(s=>s.dist+(s.use?'u':'x')).join(',');
+  if(key!==railKey){
+    railKey=key;
+    const major = span>300 ? 100 : span>120 ? 50 : 25, minor = major/2;
+    let html='';
+    for(let m=Math.ceil(vmin/minor)*minor; m<=vmax+1e-9; m+=minor){
+      const isMajor=Math.abs(m/major-Math.round(m/major))<1e-9;
+      html+=`<div class="tick ${isMajor?'':'minor'}" style="top:${at(m)}%">${isMajor?`<span>${m}</span>`:''}</div>`;
+    }
+    if(state.cal>=vmin && state.cal<=vmax) html+=`<div class="tick zero" style="top:${at(state.cal)}%" title="Zero ${state.cal} m"></div>`;
+    for(const s of ENG.list) if(s.dist>=vmin && s.dist<=vmax) html+=`<div class="shotdot ${s.use?'':'off'}${s.id===lastLoggedId?' new':''}" style="top:${at(s.dist)}%" title="Hit at ${s.dist} m"></div>`;
+    $('#ticks').innerHTML=html;
+    rail.setAttribute('aria-valuemin', vmin); rail.setAttribute('aria-valuemax', vmax);
+  }
+  const pct=Math.min(1,Math.max(0,(state.dist-vmin)/span))*100;
+  $('#thumb').style.top=pct+'%'; $('#fill').style.height=pct+'%';
+  $('#thumbV').textContent=state.dist;
+  rail.setAttribute('aria-valuenow', state.dist); rail.setAttribute('aria-valuetext', state.dist+' metres');
+}
+
+/* ---------- Calibration sheet ---------- */
+function engChanged(){ fitCache=null; saveEng(); renderEng(); refresh(); }
+function updateEngHint(){
+  const d=+$('#eDist').value, u=$('#eUnit').value, el=$('#eRead');
+  if(d>0){ const r=interpRow(baseRows(ENG.zero>0?ENG.zero:DS.baseCal), d);
+    el.placeholder = r ? (-r.drop/unitCm(u,d,unitFactor(u))).toFixed(2) : ''; }
+  else el.placeholder='';
+}
+function addShot(dist, reading, unit, note){
+  if(!(dist>0) || !isFinite(reading)) return false;
+  const factor=unitFactor(unit);
+  ENG.list.push({ id:Date.now().toString(36)+Math.random().toString(36).slice(2,6), dist, reading, unit, factor,
+    cm: -reading*unitCm(unit, dist, factor), use:true, note:note||'', t:Date.now() });
+  return true;
+}
+function renderEng(){
+  $('#eZero').value = ENG.zero; $('#eFitZero').checked = !!ENG.fitZero; $('#eUnit').value = ENG.unit;
+  const C=currentFit(), maxD=maxDist(), f=Number(state.fudge)||1;
+  const byId = new Map((C.pts||[]).map(p=>[p.s.id,p]));
+  const Zs = ENG.zero>0?ENG.zero:DS.baseCal, rowsZ=baseRows(Zs);
+  const list=[...ENG.list].sort((a,b)=>a.dist-b.dist);
+  $('#eBody').innerHTML = list.length ? list.map(s=>{
+    const p=byId.get(s.id), r=interpRow(rowsZ, s.dist), mk=markCm(s.dist, s.unit==='marks'?(+s.factor||f):f);
+    const tbl = r ? -r.drop/mk : null, extra = r ? -(s.cm-r.drop)/mk : null, after = p&&p.after!=null ? -p.after/mk : null;
+    const cls=v=>v==null?'':(Math.abs(v)<0.05?'':v>0?'neg':'pos');
+    return `<tr data-id="${s.id}" class="${s.use?'':'off'}" title="${(s.note||'').replace(/["<>&]/g,'')}">
+      <td>${s.dist}</td><td>${fmt(s.reading,2)} <small style="color:var(--dust);font-family:var(--f-ui);font-size:12px">${UNIT_SHORT[s.unit]||s.unit}</small></td>
+      <td>${tbl!=null?fmt(tbl,1):'—'}</td><td class="${cls(extra)}">${extra!=null?fmtS(extra,1):'—'}</td>
+      <td>${after!=null?fmtS(after,1):'—'}</td>
+      <td><input type="checkbox" class="eUse" aria-label="Use hit at ${s.dist} m" ${s.use?'checked':''} ${s.dist>maxD?'disabled title="Beyond the table range"':''}></td>
+      <td><button class="x eDel" type="button" aria-label="Delete hit at ${s.dist} m">✕</button></td></tr>`; }).join('')
+    : `<tr><td colspan="7" style="text-align:left;font:400 14px/1.4 var(--f-ui);color:var(--dust);padding:14px 10px">No hits yet. Log the range and the mark you held when you hit.</td></tr>`;
+
+  let html='';
+  if(!C.n) html=`<div class="note">Log one hit to fit the drop factor with the zero fixed at ${Zs} m. With hits at two or more ranges the zero offset is fitted too. Hits far from the zero say the most.</div>`;
+  else if(!C.ok) html=`<div class="note">Log a hit away from ${Zs} m. At the zero distance the drop factor has no effect.</div>`;
+  else {
+    const vel=(1/Math.sqrt(Math.max(C.s,1e-6))-1)*100, zMoa=C.th*100/2.909;
+    const rmsM = v => v/markCm(Math.max(100, C.pts.reduce((q,p)=>q+p.x,0)/C.pts.length));
+    html=`<dl class="fit">
+      <div><dt>Drop factor</dt><dd class="a">×${C.s.toFixed(3)}</dd><small>Bullet about ${Math.abs(vel).toFixed(1)}% ${vel<0?'slower':'faster'} than the table</small></div>
+      <div><dt>Zero offset</dt><dd>${C.fixedZero?Zs+' m':fmtS(zMoa,2)}</dd><small>${C.fixedZero?(ENG.fitZero?'Fixed. Needs hits at 2+ ranges':'Fixed by you'):'MOA'+(C.zeroAt?`, true zero ≈ ${C.zeroAt.toFixed(0)} m`:'')}</small></div>
+      <div><dt>Fit error</dt><dd>${C.rmsAfter.toFixed(1)}<span style="font-size:16px;color:var(--dust)"> cm</span></dd><small>From ${C.rmsBefore.toFixed(1)} cm with the table, ${C.n} hit${C.n===1?'':'s'}</small></div>
+    </dl>`;
+    if(Math.abs(C.a)>0.4) html+=`<div class="note warn">The drop factor is far from 1. Check the unit, the multiplier, and that readings are positive when you held under the center dot.</div>`;
+  }
+  $('#fitBox').innerHTML=html;
+  renderEngChart();
+  if(typeof renderHitsToggle==='function') renderHitsToggle();
+}
+function renderEngChart(){
+  const svg=$('#engChart'), W=560, H=220, L=44, R=14, T=14, B=28;
+  const C=currentFit(), maxD=maxDist(), Zs=ENG.zero>0?ENG.zero:DS.baseCal, rowsZ=baseRows(Zs);
+  const used=new Set((C.pts||[]).map(p=>p.s.id));
+  const pts=ENG.list.map(s=>{ const r=interpRow(rowsZ,s.dist); return r?{x:s.dist, y:-(s.cm-r.drop)/markCm(s.dist), on:used.has(s.id)}:null; }).filter(Boolean);
+  const curve=[]; if(C.ok) for(let x=25;x<=maxD;x+=5) curve.push({x, y:-corrAt(C,x,Zs)/markCm(x)});
+  let m=0.5; for(const p of pts) m=Math.max(m,Math.abs(p.y)); for(const p of curve) m=Math.max(m,Math.abs(p.y));
+  const stepY = m>4?2 : m>2?1 : m>1?0.5 : 0.25; m=Math.ceil(m/stepY)*stepY;
+  const sx=x=>L+(W-L-R)*x/maxD, sy=y=>T+(H-T-B)*(1-(y+m)/(2*m));
+  let g='';
+  for(let y=-m;y<=m+1e-9;y+=stepY){ const yy=sy(y);
+    g+=`<line x1="${L}" x2="${W-R}" y1="${yy}" y2="${yy}" stroke="${Math.abs(y)<1e-9?'#7E7B6C':'#383D31'}" stroke-width="${Math.abs(y)<1e-9?1.2:1}" ${Math.abs(y)<1e-9?'stroke-dasharray="4 4"':''}/>`+
+       `<text x="${L-8}" y="${yy+4}" text-anchor="end" fill="#A6A28F" font-size="12" font-family="Barlow Condensed,Arial Narrow,sans-serif">${fmtS(y,y%1?2:0).replace('±','')}</text>`; }
+  for(let x=0;x<=maxD;x+=100){ const xx=sx(x);
+    g+=`<line x1="${xx}" x2="${xx}" y1="${T}" y2="${H-B}" stroke="#2E3229"/><text x="${xx}" y="${H-8}" text-anchor="middle" fill="#A6A28F" font-size="12" font-family="Barlow Condensed,Arial Narrow,sans-serif">${x} m</text>`; }
+  if(curve.length) g+=`<polyline fill="none" stroke="#CDA86F" stroke-width="2.5" stroke-linejoin="round" points="${curve.map(p=>sx(p.x).toFixed(1)+','+sy(p.y).toFixed(1)).join(' ')}"/>`;
+  for(const p of pts) g+=`<circle cx="${sx(p.x)}" cy="${sy(p.y)}" r="5.5" fill="${p.on?'#FFB02E':'#7E7B6C'}" stroke="#191B16" stroke-width="2"><title>${p.x} m: ${fmtS(p.y,1)} marks</title></circle>`;
+  g+=`<text x="${L}" y="${T-2}" fill="#A6A28F" font-size="12" font-family="Barlow,sans-serif">extra hold, marks</text>`;
+  svg.innerHTML=g;
+}
+
+/* ---------- Settings sheet ---------- */
+function renderSettings(){
+  $('#vZoom').value=(+state.zoom).toFixed(2); $('#vFudge').value=(+state.fudge).toFixed(2); $('#vReticle').value=state.reticle;
+  $('#vShowHeads').checked=state.showHeads; $('#vReal').checked=state.showReal; $('#wheelViz').checked=state.wheelViz;
+  $('#vHeadSize').value=state.headSize; $('#milsMult').value=(+state.milsMult).toFixed(2);
+  $('#stepChips').innerHTML=STEP_PRESETS.map(v=>`<button type="button" data-v="${v}" aria-pressed="${v===state.panStep}">${v}</button>`).join('');
+  $('#stepCustom').value=state.panStep;
+  const maxD=maxDist();
+  const opts=[...new Set([...CALIBRATIONS.filter(c=>c<=maxD), DS.baseCal])].sort((a,b)=>a-b);
+  $('#calSel').innerHTML=opts.map(c=>`<option value="${c}" ${c===state.cal?'selected':''}>${c} m${c===DS.baseCal?' (table)':''}</option>`).join('');
+  $('#rngMin').value = state.rangeMin>0 ? viewMin() : ''; $('#rngMin').placeholder = '0';
+  $('#rngMax').value = state.rangeMax>0 ? viewMax() : ''; $('#rngMax').placeholder = String(maxD);
+  $('#rngNote').textContent = `The rail, dials, drop chart and DOPE card show ${viewMin()}–${viewMax()} m. The table goes to ${maxD} m.`;
+  $('#calNote').textContent = state.cal===DS.baseCal ? 'Zero distance of the imported table.' : `Approximate re-zero from the ${DS.baseCal} m table.`;
+  const m=DS.meta||{};
+  const pairs = DS.meta ? [['Weapon',m.weapon],['Barrel',m.barrel],['Ammo',m.ammo],['Penetration',m.pen],['Damage',m.dmg],['Initial speed',m.speed],['Ballistic coefficient',m.bc],['Table zero',DS.baseCal+' m'],['Max range',maxD+' m']]
+                        : [['Name',DS.label],['Table zero',DS.baseCal+' m'],['Max range',maxD+' m']];
+  $('#kvSetup').innerHTML=pairs.map(([k,v])=>`<dt>${k}</dt><dd>${v??'—'}</dd>`).join('');
+}
+function renderSetupChip(){
+  const m=DS.meta;
+  if(m){ $('#suWeapon').textContent=m.weapon; $('#suBarrel').textContent=(m.barrel||'').replace(m.weapon,'').trim()||m.barrel; $('#suAmmo').textContent=(m.ammo||'').replace(m.caliber,'').trim()||m.ammo; }
+  else { $('#suWeapon').textContent=DS.label||'Imported table'; $('#suBarrel').textContent=''; $('#suAmmo').textContent=''; }
+  $('#suBarrel').hidden=!$('#suBarrel').textContent; $('#suAmmo').hidden=!$('#suAmmo').textContent;
+  $('#fsW').textContent = m ? m.weapon : (DS.label||'Imported table');
+  $('#fsB').textContent = m ? m.barrel : '—'; $('#fsA').textContent = m ? m.ammo : '—';
+  $('#fsB').parentElement.hidden=!m; $('#fsA').parentElement.hidden=!m;
+}
+
+/* ---------- Knurled metal dials ---------- */
+// The wheel is a knurled cylinder seen side-on (axis horizontal) with a center groove, like a thumbwheel ring.
+const RIDGE_PX = 8.5;                      // ridge spacing at the wheel center = one detent
+function drawWheel(cv, pos){
+  const w=cv.clientWidth, h=cv.clientHeight; if(!w||!h) return;
+  const dpr=Math.min(3, window.devicePixelRatio||1), pw=Math.round(w*dpr), ph=Math.round(h*dpr);
+  if(cv.width!==pw||cv.height!==ph){ cv.width=pw; cv.height=ph; }
+  const ctx=cv.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,w,h);
+  const R=h/2, cy=h/2, dth=RIDGE_PX/R, rim=Math.max(7,w*.055), groove=Math.max(6,w*.045), gx=w/2;
+  // brushed steel body
+  const g=ctx.createLinearGradient(0,0,0,h);
+  g.addColorStop(0,'#17191b'); g.addColorStop(.15,'#55595d'); g.addColorStop(.35,'#c3c7cb'); g.addColorStop(.46,'#f1f2f3');
+  g.addColorStop(.56,'#b2b6ba'); g.addColorStop(.8,'#45484c'); g.addColorStop(1,'#131517');
+  ctx.fillStyle=g; ctx.fillRect(0,0,w,h);
+  // knurl ridges (two bands either side of the groove), projected on the cylinder
+  const zones=[[rim, gx-groove/2],[gx+groove/2, w-rim]];
+  const frac=pos-Math.floor(pos), n=Math.ceil((Math.PI/2)/dth)+1;
+  for(let k=-n;k<=n;k++){
+    const phi=(k+frac)*dth; if(Math.abs(phi)>=Math.PI/2) continue;
+    const y=cy-R*Math.sin(phi), c=Math.cos(phi);
+    const th=Math.max(.6, 3.1*c), hl=Math.pow(Math.max(0,Math.cos(phi-.38)),6)*.8, hh=Math.max(.5,1.3*c);
+    for(const [x0,x1] of zones){
+      ctx.fillStyle=`rgba(8,9,10,${(.62-.3*c).toFixed(3)})`; ctx.fillRect(x0, y-th/2, x1-x0, th);
+      ctx.fillStyle=`rgba(255,255,255,${hl.toFixed(3)})`; ctx.fillRect(x0, y-th/2-hh, x1-x0, hh);
+    }
+  }
+  // center groove
+  const gg=ctx.createLinearGradient(gx-groove/2,0,gx+groove/2,0);
+  gg.addColorStop(0,'rgba(0,0,0,.8)'); gg.addColorStop(.55,'rgba(0,0,0,.4)'); gg.addColorStop(1,'rgba(255,255,255,.28)');
+  ctx.fillStyle=gg; ctx.fillRect(gx-groove/2,0,groove,h);
+  // smooth chamfered rims
+  ctx.fillStyle='rgba(0,0,0,.45)'; ctx.fillRect(rim-1,0,1,h); ctx.fillRect(w-rim,0,1,h);
+  ctx.fillStyle='rgba(255,255,255,.22)'; ctx.fillRect(rim,0,1,h); ctx.fillRect(w-rim+1,0,1,h);
+  const eg=ctx.createLinearGradient(0,0,w,0);
+  eg.addColorStop(0,'rgba(0,0,0,.5)'); eg.addColorStop(.05,'rgba(0,0,0,0)'); eg.addColorStop(.95,'rgba(0,0,0,0)'); eg.addColorStop(1,'rgba(0,0,0,.5)');
+  ctx.fillStyle=eg; ctx.fillRect(0,0,w,h);
+  // curvature falloff top and bottom
+  const vg=ctx.createLinearGradient(0,0,0,h);
+  vg.addColorStop(0,'rgba(0,0,0,.6)'); vg.addColorStop(.22,'rgba(0,0,0,0)'); vg.addColorStop(.78,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(0,0,0,.65)');
+  ctx.fillStyle=vg; ctx.fillRect(0,0,w,h);
+}
+function makeDial(el, o){
+  const cv=el.querySelector('canvas'), out=el.querySelector('output'), wheel=el.querySelector('.wheel');
+  const d={ value:null, pos:0, target:null, dragging:false };
+  const mn=()=>typeof o.min==='function'?o.min():o.min;
+  const span=()=>Math.max(0,(o.max()-mn())/o.step), clampP=p=>Math.max(0,Math.min(span(),p));
+  const posOf=v=>(v-mn())/o.step, valOf=p=>+(mn()+Math.round(p)*o.step).toFixed(o.dec);
+  let raf=0;
+  const paint=()=>{ drawWheel(cv,d.pos); o.onPaint&&o.onPaint(); };
+  function show(v){ out.textContent=fmt(v,o.dec); el.setAttribute('aria-valuenow',v); el.setAttribute('aria-valuetext',`${fmt(v,o.dec)} ${o.unit}`);
+    el.setAttribute('aria-valuemin',mn()); el.setAttribute('aria-valuemax',o.max()); }
+  function setPos(p, user){ d.pos=clampP(p); const v=valOf(d.pos);
+    if(v!==d.value){ d.value=v; show(v); if(user){ o.onInput(v); if(d.pointerType==='touch' && navigator.vibrate) navigator.vibrate(4); } }
+    paint(); }
+  function animateTo(p, ms, user){ cancelAnimationFrame(raf); const from=d.pos, to=clampP(p), t0=performance.now();
+    if(reduceMotion()||ms<=0){ setPos(to,user); d.target=null; return; }
+    const f=now=>{ const t=Math.min(1,(now-t0)/ms), e=1-Math.pow(1-t,3); setPos(from+(to-from)*e,user);
+      if(t<1) raf=requestAnimationFrame(f); else d.target=null; };
+    raf=requestAnimationFrame(f); }
+  function stepBy(n){ const base=d.target!=null?d.target:Math.round(d.pos); d.target=clampP(base+n); animateTo(d.target,170,true); }
+  d.stepBy=stepBy;
+  d.set=(v,anim=true)=>{ if(d.dragging||v==null||!isFinite(v)) return; if(v===d.value && d.target==null) { paint(); return; }
+    if(anim) animateTo(posOf(v),260,false); else { cancelAnimationFrame(raf); d.pos=clampP(posOf(v)); d.value=valOf(d.pos); show(d.value); paint(); } };
+  d.kick=()=>{ el.classList.remove('kick'); void el.offsetWidth; el.classList.add('kick'); };
+  d.paint=paint;
+  // drag with inertia; a tap steps by one (upper half +, lower half −)
+  let lastY=0,lastT=0,vel=0,moved=0,startY=0;
+  wheel.addEventListener('pointerdown',e=>{ d.dragging=true; d.pointerType=e.pointerType; d.target=null; cancelAnimationFrame(raf);
+    wheel.setPointerCapture(e.pointerId); lastY=startY=e.clientY; lastT=performance.now(); vel=0; moved=0; el.classList.add('turning'); el.focus({preventScroll:true}); e.preventDefault(); });
+  wheel.addEventListener('pointermove',e=>{ if(!d.dragging) return; const now=performance.now(), dy=lastY-e.clientY, dp=dy/RIDGE_PX;
+    moved=Math.max(moved,Math.abs(e.clientY-startY)); setPos(d.pos+dp,true);
+    const dt=Math.max(1,now-lastT); vel=.75*(dp/dt)+.25*vel; lastY=e.clientY; lastT=now; });
+  const end=e=>{ if(!d.dragging) return; d.dragging=false; el.classList.remove('turning'); try{ wheel.releasePointerCapture(e.pointerId); }catch(_){}
+    if(moved<4){ const r=wheel.getBoundingClientRect(); stepBy(e.clientY<r.top+r.height/2?1:-1); return; }
+    if(performance.now()-lastT>80) vel=0;
+    if(reduceMotion()||Math.abs(vel)<.004){ animateTo(Math.round(d.pos),150,true); return; }
+    let v=vel, prev=performance.now();
+    const f=now=>{ const dt=now-prev; prev=now; setPos(d.pos+v*dt,true); v*=Math.pow(.993,dt);
+      if(Math.abs(v)>.004 && d.pos>0 && d.pos<span()) raf=requestAnimationFrame(f); else animateTo(Math.round(d.pos),180,true); };
+    raf=requestAnimationFrame(f); };
+  wheel.addEventListener('pointerup',end); wheel.addEventListener('pointercancel',end);
+  let acc=0;
+  wheel.addEventListener('wheel',e=>{ e.preventDefault(); const dy=e.deltaMode===1?e.deltaY*40:e.deltaMode===2?e.deltaY*400:e.deltaY;
+    acc+=dy; if(Math.abs(acc)>=40){ stepBy((acc<0?1:-1)*(e.shiftKey?5:1)); acc=0; } },{passive:false});
+  el.addEventListener('keydown',e=>{ const k=e.key; let h=true;
+    if(k==='ArrowUp'||k==='ArrowRight') stepBy(1); else if(k==='ArrowDown'||k==='ArrowLeft') stepBy(-1);
+    else if(k==='PageUp') stepBy(10); else if(k==='PageDown') stepBy(-10);
+    else if(k==='Enter') logHit(); else h=false;
+    if(h){ e.preventDefault(); e.stopPropagation(); } });
+  new ResizeObserver(paint).observe(cv);
+  return d;
+}
+let markTouched=false, lastLoggedId=null, predHold=0;
+const distDial = makeDial($('#dDist'), { min:()=>Math.max(5, Math.ceil(distBounds()[0]/5)*5), step:5, dec:0, unit:'metres', max:()=>Math.floor(distBounds()[1]/5)*5,
+  onInput:v=>selectDist(v) });
+const markDial = makeDial($('#dMark'), { min:-5, step:0.1, dec:1, unit:'marks', max:()=>30, onPaint:()=>renderPreview(),
+  onInput:()=>{ markTouched=true; updateLogHint(); renderPreview(); } });
+function syncLogger(pred){
+  predHold=Math.round(pred*10)/10;
+  distDial.set(Math.round(state.dist/5)*5);
+  if(!markTouched) markDial.set(predHold);
+  updateLogHint(); renderPreview();
+}
+function updateLogHint(){
+  const v=markDial.value, diff=(v??predHold)-predHold;
+  $('#logHint').innerHTML = !markTouched || Math.abs(diff)<.05 ? `Predicted <b>${fmt(predHold,1)}</b>`
+    : `<b>${fmtS(diff,1)}</b> vs predicted ${fmt(predHold,1)}`;
+}
+/* Live preview in the log panel: aim (cyan) at the held mark, table impact (pink), hits logged near this range (orange) */
+let pvRaf=0;
+function renderPreview(){
+  cancelAnimationFrame(pvRaf);
+  pvRaf=requestAnimationFrame(()=>{
+    if(!$('#pLog').classList.contains('open')) return;
+    const dist=distDial.value||state.dist, hold=markDial.value ?? predHold, v=valuesAt(dist); if(!v) return;
+    const near=ENG.list.filter(s=>s.use!==false && Math.abs(s.dist-dist)<=10);
+    const hits=near.map(s=>-s.cm/markCm(s.dist));
+    drawScope($('#pv'), { dist, drop:v.base, disp:v.disp, H:380, minW:300, hold, markers:true, hits });
+    const cm=(hold-holdOf(v.base,dist))*markCm(dist);
+    $('#pvMark').textContent=fmt(hold,1);
+    $('#pvImpact').textContent = Math.abs(cm)<1 ? 'on the head' : `${Math.abs(cm).toFixed(0)} cm ${cm>0?'high':'low'}`;
+    $('#pvHits').textContent=near.length;
+  });
+}
+new ResizeObserver(()=>renderPreview()).observe($('#pv'));
+
+/* Collapsible panels: open by default on desktop, closed on phones; remembered per device class */
+const narrowMQ=matchMedia('(max-width:1000px)');
+const panelMap=()=>narrowMQ.matches?state.panelsM:state.panelsD;
+const panelOpen=id=>{ const v=panelMap()[id]; return v==null ? (!narrowMQ.matches && (id==='dope'||id==='chart')) : v; };
+function applyPanels(){
+  for(const [id,sec,head] of [['log','#pLog','#hLog'],['chart','#pChart','#hChart'],['dope','#pDope','#hDope']]){
+    const o=panelOpen(id); $(sec).classList.toggle('open',o); $(head).setAttribute('aria-expanded',o); }
+}
+function togglePanel(id){
+  panelMap()[id]=!panelOpen(id); savePrefs(); applyPanels();
+  if(id==='log') renderPreview();
+  if(id==='chart') renderDropChart();
+  if(id==='dope' && panelOpen('dope')) setTimeout(highlightDope,360);
+}
+$('#hLog').onclick=()=>togglePanel('log');
+$('#hDope').onclick=()=>togglePanel('dope');
+$('#hChart').onclick=()=>togglePanel('chart');
+narrowMQ.addEventListener('change',()=>{ applyPanels(); renderPreview(); });
+
+function logHit(){
+  const dist=distDial.value, marks=markDial.value;
+  if(!(dist>0) || marks==null) return;
+  const prevOk=currentFit().ok;
+  addShot(dist, marks, 'marks', ''); lastLoggedId=ENG.list[ENG.list.length-1].id; railKey='';
+  markTouched=false; engChanged();
+  // feedback: button stamp, rings on the scope, rail dot pops, dials settle to the new prediction, haptic
+  const b=$('#btnLog'); b.classList.remove('ok'); void b.offsetWidth; b.classList.add('ok'); clearTimeout(b._t); b._t=setTimeout(()=>b.classList.remove('ok'),1400);
+  if(!reduceMotion()){ const lens=document.querySelector('.lens');
+    for(const box of [lens, $('#pLog').classList.contains('open')?$('.pv'):null]) if(box)
+      for(const c of ['','b']){ const r=document.createElement('i'); r.className='ping '+c; box.appendChild(r); setTimeout(()=>r.remove(),1100); } }
+  distDial.kick(); markDial.kick();
+  if(navigator.vibrate) navigator.vibrate([12,40,18]);
+  const C=currentFit();
+  toast(`Hit at ${dist} m, ${fmt(marks,1)} marks logged. ${C.ok?(prevOk?'Calibration updated':'Calibration ready'):'Log one more away from the zero'}`);
+}
+
+/* ---------- Drop chart: drop by range, table vs corrected, logged hits, selected range ---------- */
+let dcRaf=0;
+function hitDropAtCal(s){            // observed drop of a hit, re-referenced to the current zero
+  const Zs=ENG.zero>0?ENG.zero:DS.baseCal, a=interpRow(baseRows(state.cal),s.dist), b=interpRow(baseRows(Zs),s.dist);
+  return a&&b ? s.cm + (a.drop-b.drop) : s.cm;
+}
+function renderDropChart(){
+  cancelAnimationFrame(dcRaf);
+  dcRaf=requestAnimationFrame(()=>{
+    const hits=ENG.list.filter(s=>s.dist>=viewMin() && s.dist<=viewMax());
+    $('#chartHint').textContent = hits.length ? `${hits.length} hit${hits.length===1?'':'s'}` : '';
+    if(!$('#pChart').classList.contains('open')) return;
+    const svg=$('#dropChart'), W=Math.max(240, svg.clientWidth||400), H=Math.max(140, svg.clientHeight||200);
+    const L=54, R=14, T=12, B=26, vmin=viewMin(), vmax=viewMax(), C=currentFit();
+    const pts=[]; for(let x=Math.max(5,Math.ceil(vmin/5)*5); x<=vmax+1e-9; x+=5){ const v=valuesAt(x); if(v) pts.push(v); }
+    if(!pts.length) return;
+    const ys=[...pts.map(p=>p.base), ...(C.ok?pts.map(p=>p.corr):[]), ...hits.map(hitDropAtCal), 0];
+    let ymin=Math.min(...ys)-10, ymax=Math.max(...ys)+10;
+    const rough=(ymax-ymin)/5, mag=Math.pow(10,Math.floor(Math.log10(rough))), stepY=[1,2,5,10].map(m=>m*mag).find(v=>v>=rough)||rough;
+    ymin=Math.floor(ymin/stepY)*stepY; ymax=Math.ceil(ymax/stepY)*stepY;
+    const sx=x=>L+(W-L-R)*(x-vmin)/(vmax-vmin), sy=y=>T+(H-T-B)*(ymax-y)/(ymax-ymin);
+    const F='font-family="Barlow Condensed,Arial Narrow,sans-serif" font-size="12" fill="#A6A28F"';
+    let g='';
+    for(let y=ymin;y<=ymax+1e-9;y+=stepY){ const yy=sy(y).toFixed(1);
+      g+=`<line x1="${L}" x2="${W-R}" y1="${yy}" y2="${yy}" stroke="#2E3229"/><text x="${L-7}" y="${+yy+4}" text-anchor="end" ${F}>${fmt(y,0)}</text>`; }
+    const span=vmax-vmin, xs = [25,50,100,200,500].find(v=>(W-L-R)*v/span>=54) || 500;   // labels at least ~54 px apart
+    for(let x=Math.ceil(vmin/xs)*xs;x<=vmax+1e-9;x+=xs){ const xx=sx(x).toFixed(1);
+      const anchor = +xx > W-R-20 ? 'end' : +xx < L+16 ? 'start' : 'middle';
+      g+=`<line x1="${xx}" x2="${xx}" y1="${T}" y2="${H-B}" stroke="#2A2E25"/><text x="${anchor==='end'?W-R:xx}" y="${H-8}" text-anchor="${anchor}" ${F}>${x} m</text>`; }
+    g+=`<text transform="translate(12 ${(T+H-B)/2}) rotate(-90)" text-anchor="middle" ${F}>drop, cm</text>`;
+    // line of sight and zero
+    g+=`<line x1="${L}" x2="${W-R}" y1="${sy(0)}" y2="${sy(0)}" stroke="#E42028" stroke-opacity=".55" stroke-dasharray="5 4"/>`;
+    if(state.cal>=vmin && state.cal<=vmax) g+=`<line x1="${sx(state.cal)}" x2="${sx(state.cal)}" y1="${sy(0)-6}" y2="${sy(0)+6}" stroke="#E42028" stroke-width="2"><title>Zero ${state.cal} m</title></line>`;
+    // head band (16 cm) around the line you aim with
+    const act=p=>(state.vizCorr&&C.ok)?p.corr:p.base, hh=headSize()/2;
+    g+=`<polygon fill="rgba(233,228,212,.09)" points="${pts.map(p=>sx(p.dist).toFixed(1)+','+sy(act(p)+hh).toFixed(1)).join(' ')} ${pts.slice().reverse().map(p=>sx(p.dist).toFixed(1)+','+sy(act(p)-hh).toFixed(1)).join(' ')}"/>`;
+    const path=f=>pts.map(p=>sx(p.dist).toFixed(1)+','+sy(f(p)).toFixed(1)).join(' ');
+    g+=`<polyline fill="none" stroke="${C.ok?'#6C9759':'#7FD85E'}" stroke-width="2" ${C.ok?'stroke-dasharray="6 4"':''} points="${path(p=>p.base)}"/>`;
+    if(C.ok) g+=`<polyline fill="none" stroke="#7FD85E" stroke-width="2.5" stroke-linejoin="round" points="${path(p=>p.corr)}"/>`;
+    // selected range
+    const sel=valuesAt(state.dist);
+    if(sel && state.dist>=vmin && state.dist<=vmax){ const xx=sx(state.dist), yy=sy(act(sel)), lbl=`${state.dist} m, ${fmt(act(sel),1)} cm`;
+      g+=`<line x1="${xx}" x2="${xx}" y1="${T}" y2="${H-B}" stroke="#CDA86F" stroke-width="1.5"/><circle cx="${xx}" cy="${yy}" r="5" fill="#CDA86F" stroke="#191B16" stroke-width="2"/>`;
+      const right = xx < W-150; g+=`<text x="${right?xx+8:xx-8}" y="${T+12}" text-anchor="${right?'start':'end'}" font-family="Barlow Condensed,Arial Narrow,sans-serif" font-size="14" font-weight="600" fill="#E9E4D4">${lbl}</text>`; }
+    // logged hits
+    for(const s of hits){ const y=hitDropAtCal(s), xx=sx(s.dist), yy=sy(y), r=5.5;
+      g+=`<path d="M${xx} ${yy-r}L${xx+r} ${yy}L${xx} ${yy+r}L${xx-r} ${yy}Z" fill="${s.use?'#FFB02E':'#7E7B6C'}" stroke="#191B16" stroke-width="1.5"><title>Hit at ${s.dist} m: ${fmt(s.reading,2)} ${UNIT_SHORT[s.unit]||s.unit}, drop ${fmt(y,1)} cm</title></path>`; }
+    svg.setAttribute('viewBox',`0 0 ${W} ${H}`); svg.innerHTML=g;
+    svg._map={L,R,W,vmin,vmax};
+  });
+}
+(()=>{ const box=$('#dchartBox'), svg=$('#dropChart'); let down=false;
+  const pick=e=>{ const m=svg._map; if(!m) return; const r=svg.getBoundingClientRect(); const x=(e.clientX-r.left)*m.W/r.width;
+    const t=Math.min(1,Math.max(0,(x-m.L)/(m.W-m.L-m.R))); const v=snapDist(m.vmin+t*(m.vmax-m.vmin)); if(v!==state.dist) selectDist(v); };
+  box.addEventListener('pointerdown',e=>{ down=true; box.setPointerCapture(e.pointerId); pick(e); });
+  box.addEventListener('pointermove',e=>{ if(down) pick(e); });
+  box.addEventListener('pointerup',()=>down=false); box.addEventListener('pointercancel',()=>down=false);
+  new ResizeObserver(()=>renderDropChart()).observe(box); })();
+
+/* ---------- Refresh ---------- */
+function refresh(){ renderReadout(); drawViz(); updateRail(); renderDope(); renderDropChart(); }
+function selectDist(dv){ state.dist=dv; savePrefs(); refresh(); }
+function renderAll(){ fitCache=null; brCache=null; dopeKey=''; railKey=''; renderSetupChip(); renderSettings(); renderEng(); refresh(); }
+
+/* ---------- Toast ---------- */
+let toastT; function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),2200); }
+
+/* ---------- Sheets ---------- */
+function openSheet(d){ if(d.open) return; const b=d.querySelector('.sheet-body'); d.showModal(); if(b){ b.scrollTop=0; requestAnimationFrame(()=>{ b.scrollTop=0; }); } }
+document.querySelectorAll('dialog').forEach(d=>{
+  d.addEventListener('click',e=>{ if(e.target===d) d.close(); if(e.target.closest('[data-close]')) d.close(); });
+});
+$('#btnCal').onclick=()=>{ renderEng(); openSheet($('#dlgCal')); };
+let hitsOpen=false;
+function renderHitsToggle(){ $('#hitsBox').classList.toggle('open',hitsOpen); $('#btnHits').setAttribute('aria-expanded',hitsOpen);
+  $('#hitsLbl').textContent = hitsOpen ? 'Hide logged hits' : `Show logged hits (${ENG.list.length})`; }
+$('#btnHits').onclick=()=>{ hitsOpen=!hitsOpen; renderHitsToggle(); };
+$('#btnSet').onclick=()=>{ renderSettings(); renderAppState(); openSheet($('#dlgSet')); };
+$('#btnSetup').onclick=()=>{ renderSettings(); openSheet($('#dlgSet')); setTimeout(()=>$('#tableSec').scrollIntoView({block:'start'}),60); };
+
+/* ---------- Events: readout ---------- */
+$('#vMinus').onclick=()=>stepPan(-1); $('#vPlus').onclick=()=>stepPan(1);
+$('#vCorr').onchange=e=>{ state.vizCorr=e.target.checked; savePrefs(); refresh(); };
+$('#btnLog').onclick=logHit;
+$('#dopeBody').onclick=e=>{ const tr=e.target.closest('tr[data-d]'); if(tr) selectDist(+tr.dataset.d); };
+$('#btnCopy').onclick=copyDope;
+
+/* ---------- Events: scope tools ---------- */
+const setZoom=z=>{ state.zoom=Math.max(.5,Math.min(12,Math.round(z*10)/10)); savePrefs(); renderReadout(); drawViz(); };
+$('#zIn').onclick=()=>setZoom(state.zoom+(state.zoom>=4?.5:.1*Math.ceil(state.zoom*2)));
+$('#zOut').onclick=()=>setZoom(state.zoom-(state.zoom>4?.5:.1*Math.ceil(state.zoom*2)));
+$('#tHold').onclick=()=>{ state.showHeads=!state.showHeads; savePrefs(); renderReadout(); drawViz(); };
+
+/* ---------- Events: rail (drag, wheel, keys) ---------- */
+(()=>{
+  const rail=$('#rail'), track=$('#track'); let dragging=false;
+  const fromY=y=>{ const r=track.getBoundingClientRect(); const t=Math.min(1,Math.max(0,(y-r.top)/r.height));
+    const v=snapDist(viewMin()+t*(viewMax()-viewMin())); if(v!==state.dist) selectDist(v); };
+  rail.addEventListener('pointerdown',e=>{ dragging=true; rail.classList.add('drag'); rail.setPointerCapture(e.pointerId); rail.focus({preventScroll:true}); fromY(e.clientY); e.preventDefault(); });
+  rail.addEventListener('pointermove',e=>{ if(dragging) fromY(e.clientY); });
+  const end=e=>{ if(!dragging) return; dragging=false; rail.classList.remove('drag'); try{ rail.releasePointerCapture(e.pointerId); }catch(_){} };
+  rail.addEventListener('pointerup',end); rail.addEventListener('pointercancel',end);
+  let acc=0;
+  const onWheel=e=>{ e.preventDefault();
+    const dy = e.deltaMode===1 ? e.deltaY*40 : e.deltaMode===2 ? e.deltaY*400 : e.deltaY;
+    acc+=dy; if(Math.abs(acc)>=40){ stepPan(Math.sign(acc)); acc=0; } };
+  rail.addEventListener('wheel',onWheel,{passive:false});
+  $('#viz').addEventListener('wheel',e=>{ if(state.wheelViz) onWheel(e); },{passive:false});
+})();
+document.addEventListener('keydown',e=>{
+  if(e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
+  if(document.querySelector('dialog[open]')) return;
+  const tag=(e.target.tagName||'').toLowerCase(); if(['input','select','textarea'].includes(tag)) return;
+  const k=e.key; let h=true;
+  if(k==='ArrowDown'||k==='ArrowRight') stepPan(1);
+  else if(k==='ArrowUp'||k==='ArrowLeft') stepPan(-1);
+  else if(k==='PageDown'){ for(let i=0;i<4;i++) stepPan(1); }
+  else if(k==='PageUp'){ for(let i=0;i<4;i++) stepPan(-1); }
+  else if(k==='Home') selectDist(snapDist(0));
+  else if(k==='End') selectDist(distBounds()[1]);
+  else if(k==='l'||k==='L'){ if(!panelOpen('log')) togglePanel('log'); $('#dMark').focus({preventScroll:false}); }
+  else if((k==='c'||k==='C') && currentFit().ok){ state.vizCorr=!state.vizCorr; savePrefs(); refresh(); toast(state.vizCorr?'Calibrated on':'Calibrated off'); }
+  else if(k==='f'||k==='F') toggleFs();
+  else h=false;
+  if(h) e.preventDefault();
+});
+
+/* ---------- Full screen (scope + readout) ---------- */
+const station=$('#station');
+const isFs=()=>!!(document.fullscreenElement===station || document.webkitFullscreenElement===station || station.classList.contains('fs'));
+function toggleFs(){
+  const fallback=on=>{ station.classList.toggle('fs',on); document.documentElement.style.overflow=on?'hidden':''; };
+  if(isFs()){ if(document.fullscreenElement) document.exitFullscreen(); else if(document.webkitFullscreenElement) document.webkitExitFullscreen(); else fallback(false); }
+  else { const req=station.requestFullscreen||station.webkitRequestFullscreen;
+    if(req){ try{ const r=req.call(station); if(r&&r.catch) r.catch(()=>fallback(true)); }catch(e){ fallback(true); } }
+    else fallback(true); }
+}
+$('#btnFs').onclick=toggleFs;
+$('#fsExit').onclick=toggleFs;
+document.addEventListener('keydown',e=>{ if(e.key==='Escape' && station.classList.contains('fs')){ station.classList.remove('fs'); document.documentElement.style.overflow=''; } });
+for(const ev of ['fullscreenchange','webkitfullscreenchange']) document.addEventListener(ev,()=>{ $('#btnFs').setAttribute('aria-pressed',isFs()); requestAnimationFrame(drawViz); });
+new ResizeObserver(()=>{ drawViz(); }).observe($('#viz'));
+
+/* ---------- Events: settings ---------- */
+const numSet=(id,key,min,after)=>{ $(id).oninput=e=>{ const v=+e.target.value; if(e.target.value!=='' && v>=min){ state[key]=v; savePrefs(); (after||refresh)(); } }; };
+numSet('#vZoom','zoom',0.1); numSet('#vFudge','fudge',0.01,()=>{ dopeKey=''; refresh(); renderEng(); });
+numSet('#vHeadSize','headSize',1); numSet('#milsMult','milsMult',0.01,()=>{});
+$('#vReticle').onchange=e=>{ state.reticle=e.target.value; savePrefs(); drawViz(); };
+$('#vShowHeads').onchange=e=>{ state.showHeads=e.target.checked; savePrefs(); refresh(); };
+$('#vReal').onchange=e=>{ state.showReal=e.target.checked; savePrefs(); drawViz(); };
+$('#wheelViz').onchange=e=>{ state.wheelViz=e.target.checked; savePrefs(); };
+const setStep=v=>{ if(!(v>=1)) return; state.panStep=v; savePrefs();
+  $('#stepChips').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed', +b.dataset.v===v)); $('#stepCustom').value=v; syncStepSeg(); refresh(); };
+function syncStepSeg(){ document.querySelectorAll('[data-step]').forEach(b=>b.setAttribute('aria-pressed', +b.dataset.step===state.panStep)); }
+document.querySelectorAll('.stepseg').forEach(g=>g.addEventListener('click',e=>{ const b=e.target.closest('[data-step]'); if(b){ setStep(+b.dataset.step); toast(`Step ${b.dataset.step} m`); } }));
+$('#stepChips').onclick=e=>{ const b=e.target.closest('button'); if(b) setStep(+b.dataset.v); };
+$('#stepCustom').onchange=e=>setStep(+e.target.value);
+$('#calSel').onchange=e=>{ state.cal=+e.target.value; railKey=''; renderSettings(); refresh(); };
+function setRange(minV, maxV){
+  const maxD=maxDist(); let mn=minV>0?minV:0, mx=maxV>0?Math.min(maxV,maxD):0;
+  if((mx||maxD) - mn < 10){ toast('Show to must be at least 10 m beyond show from'); renderSettings(); return; }
+  state.rangeMin=mn; state.rangeMax=(mx&&mx<maxD)?mx:0; savePrefs(); railKey=''; dopeKey='';
+  const [a,b]=distBounds(); if(state.dist<a) state.dist=snapDist(a); if(state.dist>b) state.dist=b;
+  renderSettings(); refresh(); }
+$('#rngMin').onchange=e=>setRange(+e.target.value||0, state.rangeMax);
+$('#rngMax').onchange=e=>setRange(state.rangeMin, +e.target.value||0);
+$('#rngReset').onclick=()=>{ setRange(0,0); toast('Showing the full table'); };
+
+/* ---------- Events: calibration ---------- */
+$('#eDist').oninput=updateEngHint;
+$('#eUnit').onchange=e=>{ ENG.unit=e.target.value; saveEng(); updateEngHint(); };
+const doAdd=()=>{ const ok=addShot(+$('#eDist').value, parseFloat($('#eRead').value), $('#eUnit').value, $('#eNote').value.trim());
+  if(!ok){ $('#eHint').innerHTML='<span style="color:#F1C27D">Enter a range and a reading.</span>'; return; }
+  $('#eHint').textContent='Positive = the bullet landed below the center dot.';
+  $('#eRead').value=''; $('#eNote').value=''; engChanged(); $('#eRead').focus(); toast('Hit logged'); };
+$('#eAdd').onclick=doAdd;
+$('#eRead').onkeydown=e=>{ if(e.key==='Enter') doAdd(); };
+$('#eBulkAdd').onclick=()=>{ let n=0; const u=$('#eUnit').value;
+  for(const ln of $('#eBulk').value.split(/\r?\n/)){ const v=(ln.match(/-?\d+(?:[.,]\d+)?/g)||[]).map(x=>parseFloat(x.replace(',','.'))); if(v.length>=2 && addShot(v[0], v[1], u, '')) n++; }
+  if(n){ $('#eBulk').value=''; engChanged(); toast(`${n} hit${n===1?'':'s'} logged`); } };
+$('#eBody').onclick=e=>{ const tr=e.target.closest('tr[data-id]'); if(!tr) return; const s=ENG.list.find(x=>x.id===tr.dataset.id); if(!s) return;
+  if(e.target.classList.contains('eDel')){ ENG.list=ENG.list.filter(x=>x!==s); engChanged(); toast(`Hit at ${s.dist} m deleted`); }
+  else if(e.target.classList.contains('eUse')){ s.use=e.target.checked; engChanged(); } };
+$('#eZero').onchange=e=>{ const v=+e.target.value; if(v>0){ ENG.zero=v; engChanged(); } };
+$('#eFitZero').onchange=e=>{ ENG.fitZero=e.target.checked; engChanged(); };
+$('#eClear').onclick=()=>{ if(ENG.list.length && confirm('Delete all hits for this table?')){ ENG.list=[]; engChanged(); toast('All hits deleted'); } };
+$('#eExport').onclick=()=>{ const blob=new Blob([JSON.stringify({label:DS.label, ...ENG},null,2)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='hits-'+(DS.label||'table').replace(/[^\w.-]+/g,'_')+'.json'; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000); };
+$('#eImport').onclick=()=>$('#eFile').click();
+$('#eFile').onchange=async e=>{ const f=e.target.files[0]; if(!f) return;
+  try{ const o=JSON.parse(await f.text()); if(!Array.isArray(o.list)) throw 0;
+    const ids=new Set(ENG.list.map(x=>x.id)); let n=0;
+    for(const s of o.list){ if(s && s.dist>0 && isFinite(s.cm) && !ids.has(s.id)){ ENG.list.push({use:true, note:'', ...s}); n++; } }
+    if(o.zero>0) ENG.zero=o.zero; engChanged(); toast(`${n} hit${n===1?'':'s'} imported`);
+  }catch(err){ toast('That file is not a hits export'); }
+  e.target.value=''; };
+
+/* ---------- Import table ---------- */
+function parseTable(text){
+  const out=[], seen=new Set();
+  for(const ln of text.split(/\r?\n/)){
+    const nums=ln.match(/-?\d+(?:\.\d+)?/g); if(!nums || nums.length<10) continue;
+    const v=nums.map(Number); if(seen.has(v[0])) continue; seen.add(v[0]);
+    out.push([v[0],v[1],v[2],v[3],v[6],v[7],v[9]]);
+  }
+  out.sort((a,b)=>a[0]-b[0]);
+  return out.length>=3 ? out : null;
+}
+$('#btnImport').onclick=()=>{ $('#impErr').hidden=true; openSheet($('#dlgImp')); };
+$('#impOk').onclick=()=>{
+  const rows=parseTable($('#impText').value);
+  if(!rows){ const el=$('#impErr'); el.textContent='No table rows found. Each row needs the 10 columns of the drop table.'; el.hidden=false; return; }
+  const cal=+$('#impCal').value||50;
+  DS={ label:$('#impLabel').value.trim()||'Imported table', baseCal:cal, generated:null, meta:null, rows };
+  saveSet(DS); state.cal=cal; ENG=loadEng(); $('#dlgImp').close(); renderAll(); toast('Table imported');
+};
+$('#btnReset').onclick=()=>{ clearSaved(); DS=DEFAULT_SET; state.cal=DS.baseCal; ENG=loadEng(); renderAll(); toast('DVL-10 table restored'); };
+
+/* ---------- PWA: offline service worker, install, updates ---------- */
+const standalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
+let installEvt=null, swReg=null, swWaiting=null;
+function renderAppState(){
+  const parts=[];
+  parts.push(standalone() ? 'Running as an installed app.' : (installEvt ? 'This browser can install it as an app.' : 'Open in a browser that supports installing apps, or add it to the home screen.'));
+  parts.push(navigator.serviceWorker?.controller ? 'Works offline.' : (location.protocol==='file:' ? 'Offline mode needs the page served over https.' : 'Offline copy is being prepared.'));
+  if(window._persisted!=null) parts.push(window._persisted ? 'Your hits are protected from automatic cleanup.' : '');
+  $('#appState').textContent=parts.filter(Boolean).join(' ');
+  for(const b of ['#btnInstall','#btnInstall2']) $(b).hidden = !installEvt || standalone();
+  $('#iosHint').hidden = !(isIOS && !standalone());
+}
+async function doInstall(){
+  if(!installEvt) return;
+  installEvt.prompt(); const r=await installEvt.userChoice.catch(()=>null);
+  installEvt=null; renderAppState(); if(r && r.outcome==='accepted') toast('Installing Ballistic Visualizer');
+}
+window.addEventListener('beforeinstallprompt', e=>{ e.preventDefault(); installEvt=e; renderAppState(); });
+window.addEventListener('appinstalled', ()=>{ installEvt=null; renderAppState(); toast('Installed'); });
+$('#btnInstall').onclick=doInstall; $('#btnInstall2').onclick=doInstall;
+function showUpdate(w){ swWaiting=w; $('#updBar').hidden=false; }
+$('#updLater').onclick=()=>{ $('#updBar').hidden=true; };
+$('#updReload').onclick=()=>{ if(swWaiting) swWaiting.postMessage('skipWaiting'); else location.reload(); };
+$('#btnUpdate').onclick=async()=>{ if(!swReg){ toast('Updates need the page served over https'); return; }
+  await swReg.update().catch(()=>{}); if(swReg.waiting) showUpdate(swReg.waiting); else toast('You have the latest version'); };
+if('serviceWorker' in navigator && (location.protocol==='https:' || ['localhost','127.0.0.1'].includes(location.hostname))){
+  window.addEventListener('load', async()=>{
+    try{
+      swReg = await navigator.serviceWorker.register('sw.js');
+      if(swReg.waiting && navigator.serviceWorker.controller) showUpdate(swReg.waiting);
+      swReg.addEventListener('updatefound', ()=>{ const w=swReg.installing; if(!w) return;
+        w.addEventListener('statechange', ()=>{ if(w.state==='installed'){ if(navigator.serviceWorker.controller) showUpdate(w); else { renderAppState(); toast('Ready to use offline'); } } }); });
+      let reloaded=false;
+      navigator.serviceWorker.addEventListener('controllerchange', ()=>{ if(swWaiting && !reloaded){ reloaded=true; location.reload(); } else renderAppState(); });
+    }catch(e){ console.warn('Service worker not registered', e); }
+    renderAppState();
+  });
+}
+// Ask the browser to keep logged hits even when storage is low.
+if(navigator.storage && navigator.storage.persist){
+  navigator.storage.persisted().then(p=> p || navigator.storage.persist()).then(p=>{ window._persisted=p; renderAppState(); }).catch(()=>{});
+}
+// App shortcuts: ?panel=log | ?panel=dope opens that panel
+(()=>{ const q=new URLSearchParams(location.search).get('panel');
+  if(q==='log'||q==='dope'){ panelMap()[q]=true; applyPanels(); if(q==='log') setTimeout(()=>$('#dMark').focus(),300); } })();
+renderAppState();
+
+/* ---------- Boot: lens opens, range counts up ---------- */
+syncStepSeg();
+applyPanels();
+renderAll();
+(()=>{ const el=$('#roDist'), to=state.dist; if(!reduceMotion()){ el._v=0; tween(el,to,0,900); }
+  setTimeout(()=>document.body.classList.remove('booting'), 1200); })();
+</script>
+</body>
+</html>
